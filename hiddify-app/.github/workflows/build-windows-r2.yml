@@ -14,6 +14,9 @@ env:
 jobs:
   build-windows:
     runs-on: windows-latest
+    defaults:
+      run:
+        working-directory: hiddify-app
     steps:
       - name: Checkout
         uses: actions/checkout@v6
@@ -25,7 +28,7 @@ jobs:
           channel: 'stable'
           cache: true
 
-      - name: Install dependencies
+      - name: Install deps
         run: |
           dart pub global activate fastforge
           echo "$env:LOCALAPPDATA\Pub\Cache\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
@@ -33,75 +36,77 @@ jobs:
       - name: Get dependencies
         run: flutter pub get
 
-      - name: Download Windows libs
-        run: make windows-libs
+      - name: Download Windows core libs
         shell: bash
-
-      - name: Prepare
-        run: make windows-prepare
-        shell: bash
-
-      - name: Build Windows EXE
         run: |
-          make windows-exe-release
-        shell: bash
-        env:
-          SENTRY_DSN: ''
+          mkdir -p hiddify-core/bin
+          curl -L https://github.com/hiddify/hiddify-next-core/releases/download/draft/hiddify-lib-windows-amd64.tar.gz | tar xz -C hiddify-core/bin/
+          ls hiddify-core/bin/
 
-      - name: Find and rename EXE
+      - name: Generate code
+        shell: bash
+        run: |
+          make get gen translate || true
+          dart run build_runner build --delete-conflicting-outputs || true
+
+      - name: Build Windows
+        run: flutter build windows --release
+
+      - name: Package EXE
         shell: pwsh
         run: |
-          $exe = Get-ChildItem -Path dist -Recurse -Filter "*.exe" | Select-Object -First 1
-          if ($exe) {
-            New-Item -ItemType Directory -Path "out" -Force | Out-Null
-            Copy-Item $exe.FullName "out/roxi-win-${{ github.event.inputs.version }}.exe"
-            Copy-Item $exe.FullName "out/roxi-latest.exe"
-            Write-Host "EXE found: $($exe.FullName), size: $([math]::Round($exe.Length/1MB, 1))MB"
-          } else {
-            Write-Host "No EXE found in dist/, trying build output..."
-            $exe = Get-ChildItem -Path build -Recurse -Filter "*.exe" | Select-Object -First 1
+          New-Item -ItemType Directory -Path "out" -Force | Out-Null
+          $buildDir = "build\windows\x64\runner\Release"
+          if (Test-Path $buildDir) {
+            Compress-Archive -Path "$buildDir\*" -DestinationPath "out\roxi-win-${{ github.event.inputs.version }}.zip"
+            Copy-Item "out\roxi-win-${{ github.event.inputs.version }}.zip" "out\roxi-latest.zip"
+            $exe = Get-ChildItem -Path $buildDir -Filter "*.exe" | Select-Object -First 1
             if ($exe) {
-              New-Item -ItemType Directory -Path "out" -Force | Out-Null
-              Copy-Item $exe.FullName "out/roxi-win-${{ github.event.inputs.version }}.exe"
-              Copy-Item $exe.FullName "out/roxi-latest.exe"
-            } else {
-              Write-Error "No EXE found!"
-              exit 1
+              Copy-Item $exe.FullName "out\roxi-win-${{ github.event.inputs.version }}.exe"
+              Copy-Item $exe.FullName "out\roxi-latest.exe"
             }
+            Get-ChildItem out/
+          } else {
+            Get-ChildItem -Path "build\windows" -Recurse -Depth 3
+            Write-Error "Release build directory not found"
+            exit 1
           }
-          Get-ChildItem out/
 
       - name: Upload to R2
         shell: bash
         env:
           AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
-          R2_ENDPOINT: ${{ secrets.R2_ENDPOINT }}
         run: |
-          # Install AWS CLI (pre-installed on windows-latest)
+          R2_EP="https://bd237e8588122632a186921f28ebdfee.r2.cloudflarestorage.com"
           aws configure set aws_access_key_id "$AWS_ACCESS_KEY_ID"
           aws configure set aws_secret_access_key "$AWS_SECRET_ACCESS_KEY"
           aws configure set default.region auto
 
-          # Upload versioned
-          aws s3 cp "out/roxi-win-${{ github.event.inputs.version }}.exe" \
-            "s3://app-downloads/roxi-win-${{ github.event.inputs.version }}.exe" \
-            --endpoint-url "$R2_ENDPOINT" \
-            --content-type "application/x-msdownload"
+          if [ -f "out/roxi-win-${{ github.event.inputs.version }}.exe" ]; then
+            aws s3 cp "out/roxi-win-${{ github.event.inputs.version }}.exe" \
+              "s3://app-downloads/roxi-win-${{ github.event.inputs.version }}.exe" \
+              --endpoint-url "$R2_EP" --content-type "application/x-msdownload"
+            aws s3 cp "out/roxi-latest.exe" \
+              "s3://app-downloads/roxi-latest.exe" \
+              --endpoint-url "$R2_EP" --content-type "application/x-msdownload"
+          fi
 
-          # Upload latest
-          aws s3 cp "out/roxi-latest.exe" \
-            "s3://app-downloads/roxi-latest.exe" \
-            --endpoint-url "$R2_ENDPOINT" \
-            --content-type "application/x-msdownload"
+          if [ -f "out/roxi-win-${{ github.event.inputs.version }}.zip" ]; then
+            aws s3 cp "out/roxi-win-${{ github.event.inputs.version }}.zip" \
+              "s3://app-downloads/roxi-win-${{ github.event.inputs.version }}.zip" \
+              --endpoint-url "$R2_EP" --content-type "application/zip"
+            aws s3 cp "out/roxi-latest.zip" \
+              "s3://app-downloads/roxi-latest.zip" \
+              --endpoint-url "$R2_EP" --content-type "application/zip"
+          fi
 
-          echo "✓ Uploaded to R2"
-          echo "  https://dl.roxi.cc/roxi-win-${{ github.event.inputs.version }}.exe"
-          echo "  https://dl.roxi.cc/roxi-latest.exe"
+          echo "Done! https://dl.roxi.cc/roxi-latest.exe"
 
-      - name: Upload Artifact (backup)
+      - name: Upload Artifact
         uses: actions/upload-artifact@v6
+        if: always()
         with:
-          name: windows-exe
-          path: out/
+          name: windows-build
+          path: hiddify-app/out/
           retention-days: 7

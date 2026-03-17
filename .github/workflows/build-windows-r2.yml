@@ -77,8 +77,8 @@ jobs:
         env:
           AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
-          R2_ENDPOINT: ${{ secrets.R2_ENDPOINT }}
         run: |
+          R2_EP="https://bd237e8588122632a186921f28ebdfee.r2.cloudflarestorage.com"
           aws configure set aws_access_key_id "$AWS_ACCESS_KEY_ID"
           aws configure set aws_secret_access_key "$AWS_SECRET_ACCESS_KEY"
           aws configure set default.region auto
@@ -86,19 +86,19 @@ jobs:
           if [ -f "out/roxi-win-${{ github.event.inputs.version }}.exe" ]; then
             aws s3 cp "out/roxi-win-${{ github.event.inputs.version }}.exe" \
               "s3://app-downloads/roxi-win-${{ github.event.inputs.version }}.exe" \
-              --endpoint-url "$R2_ENDPOINT" --content-type "application/x-msdownload"
+              --endpoint-url "$R2_EP" --content-type "application/x-msdownload"
             aws s3 cp "out/roxi-latest.exe" \
               "s3://app-downloads/roxi-latest.exe" \
-              --endpoint-url "$R2_ENDPOINT" --content-type "application/x-msdownload"
+              --endpoint-url "$R2_EP" --content-type "application/x-msdownload"
           fi
 
           if [ -f "out/roxi-win-${{ github.event.inputs.version }}.zip" ]; then
             aws s3 cp "out/roxi-win-${{ github.event.inputs.version }}.zip" \
               "s3://app-downloads/roxi-win-${{ github.event.inputs.version }}.zip" \
-              --endpoint-url "$R2_ENDPOINT" --content-type "application/zip"
+              --endpoint-url "$R2_EP" --content-type "application/zip"
             aws s3 cp "out/roxi-latest.zip" \
               "s3://app-downloads/roxi-latest.zip" \
-              --endpoint-url "$R2_ENDPOINT" --content-type "application/zip"
+              --endpoint-url "$R2_EP" --content-type "application/zip"
           fi
 
           echo "Done! https://dl.roxi.cc/roxi-latest.exe"
