@@ -1,0 +1,112 @@
+name: Build Windows & Upload to R2
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version number (e.g. 1.0.1)'
+        required: true
+        default: '1.0.1'
+
+env:
+  FLUTTER_VERSION: '3.38.5'
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    defaults:
+      run:
+        working-directory: hiddify-app
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2.21.0
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: 'stable'
+          cache: true
+
+      - name: Install deps
+        run: |
+          dart pub global activate fastforge
+          echo "$env:LOCALAPPDATA\Pub\Cache\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+
+      - name: Get dependencies
+        run: flutter pub get
+
+      - name: Download Windows core libs
+        shell: bash
+        run: |
+          mkdir -p hiddify-core/bin
+          curl -L https://github.com/hiddify/hiddify-next-core/releases/download/draft/hiddify-lib-windows-amd64.tar.gz | tar xz -C hiddify-core/bin/
+          ls hiddify-core/bin/
+
+      - name: Generate code
+        shell: bash
+        run: |
+          make get gen translate || true
+          dart run build_runner build --delete-conflicting-outputs || true
+
+      - name: Build Windows
+        run: flutter build windows --release
+
+      - name: Package EXE
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Path "out" -Force | Out-Null
+          $buildDir = "build\windows\x64\runner\Release"
+          if (Test-Path $buildDir) {
+            Compress-Archive -Path "$buildDir\*" -DestinationPath "out\roxi-win-${{ github.event.inputs.version }}.zip"
+            Copy-Item "out\roxi-win-${{ github.event.inputs.version }}.zip" "out\roxi-latest.zip"
+            $exe = Get-ChildItem -Path $buildDir -Filter "*.exe" | Select-Object -First 1
+            if ($exe) {
+              Copy-Item $exe.FullName "out\roxi-win-${{ github.event.inputs.version }}.exe"
+              Copy-Item $exe.FullName "out\roxi-latest.exe"
+            }
+            Get-ChildItem out/
+          } else {
+            Get-ChildItem -Path "build\windows" -Recurse -Depth 3
+            Write-Error "Release build directory not found"
+            exit 1
+          }
+
+      - name: Upload to R2
+        shell: bash
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          R2_ENDPOINT: ${{ secrets.R2_ENDPOINT }}
+        run: |
+          aws configure set aws_access_key_id "$AWS_ACCESS_KEY_ID"
+          aws configure set aws_secret_access_key "$AWS_SECRET_ACCESS_KEY"
+          aws configure set default.region auto
+
+          if [ -f "out/roxi-win-${{ github.event.inputs.version }}.exe" ]; then
+            aws s3 cp "out/roxi-win-${{ github.event.inputs.version }}.exe" \
+              "s3://app-downloads/roxi-win-${{ github.event.inputs.version }}.exe" \
+              --endpoint-url "$R2_ENDPOINT" --content-type "application/x-msdownload"
+            aws s3 cp "out/roxi-latest.exe" \
+              "s3://app-downloads/roxi-latest.exe" \
+              --endpoint-url "$R2_ENDPOINT" --content-type "application/x-msdownload"
+          fi
+
+          if [ -f "out/roxi-win-${{ github.event.inputs.version }}.zip" ]; then
+            aws s3 cp "out/roxi-win-${{ github.event.inputs.version }}.zip" \
+              "s3://app-downloads/roxi-win-${{ github.event.inputs.version }}.zip" \
+              --endpoint-url "$R2_ENDPOINT" --content-type "application/zip"
+            aws s3 cp "out/roxi-latest.zip" \
+              "s3://app-downloads/roxi-latest.zip" \
+              --endpoint-url "$R2_ENDPOINT" --content-type "application/zip"
+          fi
+
+          echo "Done! https://dl.roxi.cc/roxi-latest.exe"
+
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v6
+        if: always()
+        with:
+          name: windows-build
+          path: hiddify-app/out/
+          retention-days: 7
