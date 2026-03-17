@@ -1,0 +1,107 @@
+name: Build Windows & Upload to R2
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version number (e.g. 1.0.1)'
+        required: true
+        default: '1.0.1'
+
+env:
+  FLUTTER_VERSION: '3.38.5'
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2.21.0
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: 'stable'
+          cache: true
+
+      - name: Install dependencies
+        run: |
+          dart pub global activate fastforge
+          echo "$env:LOCALAPPDATA\Pub\Cache\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+
+      - name: Get dependencies
+        run: flutter pub get
+
+      - name: Download Windows libs
+        run: make windows-libs
+        shell: bash
+
+      - name: Prepare
+        run: make windows-prepare
+        shell: bash
+
+      - name: Build Windows EXE
+        run: |
+          make windows-exe-release
+        shell: bash
+        env:
+          SENTRY_DSN: ''
+
+      - name: Find and rename EXE
+        shell: pwsh
+        run: |
+          $exe = Get-ChildItem -Path dist -Recurse -Filter "*.exe" | Select-Object -First 1
+          if ($exe) {
+            New-Item -ItemType Directory -Path "out" -Force | Out-Null
+            Copy-Item $exe.FullName "out/roxi-win-${{ github.event.inputs.version }}.exe"
+            Copy-Item $exe.FullName "out/roxi-latest.exe"
+            Write-Host "EXE found: $($exe.FullName), size: $([math]::Round($exe.Length/1MB, 1))MB"
+          } else {
+            Write-Host "No EXE found in dist/, trying build output..."
+            $exe = Get-ChildItem -Path build -Recurse -Filter "*.exe" | Select-Object -First 1
+            if ($exe) {
+              New-Item -ItemType Directory -Path "out" -Force | Out-Null
+              Copy-Item $exe.FullName "out/roxi-win-${{ github.event.inputs.version }}.exe"
+              Copy-Item $exe.FullName "out/roxi-latest.exe"
+            } else {
+              Write-Error "No EXE found!"
+              exit 1
+            }
+          }
+          Get-ChildItem out/
+
+      - name: Upload to R2
+        shell: bash
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          R2_ENDPOINT: ${{ secrets.R2_ENDPOINT }}
+        run: |
+          # Install AWS CLI (pre-installed on windows-latest)
+          aws configure set aws_access_key_id "$AWS_ACCESS_KEY_ID"
+          aws configure set aws_secret_access_key "$AWS_SECRET_ACCESS_KEY"
+          aws configure set default.region auto
+
+          # Upload versioned
+          aws s3 cp "out/roxi-win-${{ github.event.inputs.version }}.exe" \
+            "s3://app-downloads/roxi-win-${{ github.event.inputs.version }}.exe" \
+            --endpoint-url "$R2_ENDPOINT" \
+            --content-type "application/x-msdownload"
+
+          # Upload latest
+          aws s3 cp "out/roxi-latest.exe" \
+            "s3://app-downloads/roxi-latest.exe" \
+            --endpoint-url "$R2_ENDPOINT" \
+            --content-type "application/x-msdownload"
+
+          echo "✓ Uploaded to R2"
+          echo "  https://dl.roxi.cc/roxi-win-${{ github.event.inputs.version }}.exe"
+          echo "  https://dl.roxi.cc/roxi-latest.exe"
+
+      - name: Upload Artifact (backup)
+        uses: actions/upload-artifact@v6
+        with:
+          name: windows-exe
+          path: out/
+          retention-days: 7

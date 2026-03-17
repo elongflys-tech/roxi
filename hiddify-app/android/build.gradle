@@ -1,0 +1,26 @@
+allprojects {
+    repositories {
+        mavenCentral()
+        google()
+    }
+
+    // Force replace non-existent play-services-cronet:17.1.0 with a valid version
+    configurations.all {
+        resolutionStrategy {
+            force 'com.google.android.gms:play-services-cronet:18.0.1'
+        }
+    }
+}
+
+
+rootProject.buildDir = '../build'
+subprojects {
+    project.buildDir = "${rootProject.buildDir}/${project.name}"
+}
+subprojects {
+    project.evaluationDependsOn(':app')
+}
+
+tasks.register("clean", Delete) {
+    delete rootProject.buildDir
+}
