@@ -64,20 +64,40 @@ jobs:
 
       - name: Generate DMG background
         run: |
-          python3 -m pip install Pillow -q
           python3 -c "
-          from PIL import Image, ImageDraw;
-          W, H = 540, 300;
-          img = Image.new('RGBA', (W, H), (237, 237, 237, 255));
-          overlay = Image.new('RGBA', (W, H), (0, 0, 0, 0));
-          d = ImageDraw.Draw(overlay);
-          cx, cy = W // 2, 125;
-          x1, x2 = cx - 30, cx + 30;
-          d.rounded_rectangle([x1, cy - 1, x2 - 8, cy + 2], radius=2, fill=(160, 160, 165, 180));
-          d.polygon([(x2 - 10, cy - 7), (x2 + 2, cy), (x2 - 10, cy + 7)], fill=(140, 140, 148, 200));
-          img = Image.alpha_composite(img, overlay);
-          img.convert('RGB').save('/tmp/dmg_bg.png');
-          print('Background generated')
+          import struct, zlib
+          W, H = 540, 300
+          bg = (237, 237, 237)
+          arrow_color = (160, 160, 165)
+          head_color = (140, 140, 148)
+          cx, cy = W // 2, 125
+          pixels = []
+          for y in range(H):
+              row = []
+              for x in range(W):
+                  r, g, b = bg
+                  shaft_x1, shaft_x2 = cx - 30, cx + 22
+                  if shaft_x1 <= x <= shaft_x2 and cy - 1 <= y <= cy + 1:
+                      r, g, b = arrow_color
+                  head_base_x = cx + 20
+                  head_tip_x = cx + 32
+                  if head_base_x <= x <= head_tip_x:
+                      progress = (x - head_base_x) / max(1, head_tip_x - head_base_x)
+                      half_h = int(7 * (1 - progress))
+                      if cy - half_h <= y <= cy + half_h:
+                          r, g, b = head_color
+                  row.extend([r, g, b])
+              pixels.append(bytes([0] + row))
+          raw = b''.join(pixels)
+          def chunk(ctype, data):
+              c = ctype + data
+              return struct.pack('>I', len(data)) + c + struct.pack('>I', zlib.crc32(c) & 0xffffffff)
+          with open('/tmp/dmg_bg.png', 'wb') as f:
+              f.write(b'\x89PNG\r\n\x1a\n')
+              f.write(chunk(b'IHDR', struct.pack('>IIBBBBB', W, H, 8, 2, 0, 0, 0)))
+              f.write(chunk(b'IDAT', zlib.compress(raw)))
+              f.write(chunk(b'IEND', b''))
+          print('Background generated: /tmp/dmg_bg.png')
           "
 
       - name: Create styled DMG
@@ -122,7 +142,7 @@ jobs:
           AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
         run: |
           R2_EP="https://bd237e8588122632a186921f28ebdfee.r2.cloudflarestorage.com"
-          pip install awscli -q
+          python3 -m pip install awscli --break-system-packages -q
           aws configure set aws_access_key_id "$AWS_ACCESS_KEY_ID"
           aws configure set aws_secret_access_key "$AWS_SECRET_ACCESS_KEY"
           aws configure set default.region auto
