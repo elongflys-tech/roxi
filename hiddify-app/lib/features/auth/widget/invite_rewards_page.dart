@@ -18,19 +18,35 @@ class InviteRewardsPage extends HookWidget {
     
     final inviteCode = useState<String>('');
     final invitedCount = useState<int>(0);
-    final bonusDays = useState<int>(0);
+    final balanceUsdt = useState<double>(0);
+    final totalEarned = useState<double>(0);
     final loading = useState(true);
+    final serverTexts = useState<Map<String, String>>({});
 
     useEffect(() {
       () async {
         try {
           final prefs = await SharedPreferences.getInstance();
           final auth = AuthService(prefs);
-          final info = await auth.getInviteInfo();
+
+          // Fetch server-driven text and invite info in parallel
+          final results = await Future.wait([
+            auth.getInviteText(AuthI18n.currentLang),
+            auth.getInviteInfo(),
+          ]);
+
+          final texts = results[0] as Map<String, String>?;
+          if (texts != null && texts.isNotEmpty) {
+            AuthI18n.applyServerOverrides(texts);
+            serverTexts.value = texts;
+          }
+
+          final info = results[1] as Map<String, dynamic>?;
           if (info != null) {
             inviteCode.value = info['invite_code'] ?? '';
             invitedCount.value = info['invited_count'] ?? 0;
-            bonusDays.value = info['bonus_days'] ?? 0;
+            balanceUsdt.value = (info['balance_usdt'] ?? 0).toDouble();
+            totalEarned.value = (info['total_earned_usdt'] ?? 0).toDouble();
           }
         } catch (_) {}
         loading.value = false;
@@ -86,7 +102,7 @@ class InviteRewardsPage extends HookWidget {
                   ),
                   const Gap(8),
                   Text(
-                    s['inviteRewardsSubtitle'] ?? '好友安装后填写您的邀请码即算推荐成功\n当其购买会员时，您均可获得 20% 的时长！永久有效！',
+                    s['inviteRewardsSubtitle'] ?? '好友安装后填写您的邀请码即算推荐成功\n当其购买会员时，您可获得 30% 的充值金额作为余额奖励！',
                     style: theme.textTheme.bodyMedium?.copyWith(color: Colors.grey.shade600, height: 1.5),
                     textAlign: TextAlign.center,
                   ),
@@ -161,14 +177,47 @@ class InviteRewardsPage extends HookWidget {
                       const Gap(12),
                       Expanded(
                         child: _StatCard(
-                          icon: Icons.access_time_rounded,
-                          label: s['inviteTotalReward'] ?? '累计获得',
-                          value: '${bonusDays.value}',
-                          unit: s['inviteDays'] ?? '天',
+                          icon: Icons.account_balance_wallet_rounded,
+                          label: s['inviteTotalReward'] ?? '累计收益',
+                          value: '\$${totalEarned.value.toStringAsFixed(2)}',
+                          unit: '',
                           color: Colors.orange,
                         ),
                       ),
                     ],
+                  ),
+                  const Gap(12),
+                  // Balance card
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(20),
+                    decoration: BoxDecoration(
+                      color: Colors.green.shade50,
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(color: Colors.green.shade200),
+                    ),
+                    child: Column(
+                      children: [
+                        Text(
+                          s['inviteAvailBalance'] ?? '可用余额',
+                          style: theme.textTheme.bodySmall?.copyWith(color: Colors.grey.shade600),
+                        ),
+                        const Gap(4),
+                        Text(
+                          '\$${balanceUsdt.value.toStringAsFixed(2)}',
+                          style: theme.textTheme.headlineMedium?.copyWith(
+                            fontWeight: FontWeight.bold,
+                            color: Colors.green.shade700,
+                          ),
+                        ),
+                        const Gap(8),
+                        Text(
+                          s['inviteBalanceHint'] ?? '余额可用于站内购买会员，或提现至 Base 链 USDC（满 1000 可提现）',
+                          style: TextStyle(fontSize: 12, color: Colors.green.shade800, height: 1.4),
+                          textAlign: TextAlign.center,
+                        ),
+                      ],
+                    ),
                   ),
                   const Gap(24),
                   // Hint
@@ -184,7 +233,7 @@ class InviteRewardsPage extends HookWidget {
                         const Gap(12),
                         Expanded(
                           child: Text(
-                            s['inviteHint'] ?? '好友购买或从其推荐人处获得会员时，您都将获得 20% 的奖励，二级推荐获得 10%',
+                            s['inviteHint'] ?? '好友购买会员时，您获得 30% 的充值金额作为余额奖励。余额可购买会员或提现。',
                             style: TextStyle(fontSize: 12, color: Colors.blue.shade900, height: 1.4),
                           ),
                         ),
@@ -251,12 +300,15 @@ class _StatCard extends StatelessWidget {
 
 void _shareInvite(BuildContext context, String inviteCode) {
   final s = AuthI18n.t;
-  final msg = '想访问 Google、YouTube、Twitter？试试 Roxi 吧！\n'
-      '免费注册，一键连接，安全稳定。\n\n'
-      '📥 下载：https://dl.roxi.cc/roxi-latest.apk\n'
-      '📢 群组：https://t.me/Roxifree\n\n'
-      '注册时填我的邀请码：$inviteCode\n'
-      '好友购买会员，你我各得时长奖励！';
+  final serverShareText = s['shareText'];
+  final msg = serverShareText != null
+      ? serverShareText.replaceAll('{code}', inviteCode)
+      : '想访问 Google、YouTube、Twitter？试试 Roxi 吧！\n'
+          '免费注册，一键连接，安全稳定。\n\n'
+          '📥 下载：https://dl.roxi.cc/roxi-latest.apk\n'
+          '📢 群组：https://t.me/Roxifree\n\n'
+          '注册时填我的邀请码：$inviteCode\n'
+          '好友充值，你获得 30% 佣金奖励！可提现！';
 
   Clipboard.setData(ClipboardData(text: msg));
   ScaffoldMessenger.of(context).showSnackBar(
@@ -300,15 +352,14 @@ void _showRulesDialog(BuildContext context) {
             ),
             _RuleItem(
               number: '2',
-              text: s['inviteRule2'] ?? '朋友购买或从其推荐人处获得会员时，您都将获得 20% 的奖励；举个例子：',
+              text: s['inviteRule2'] ?? '朋友购买会员时，您获得其充值金额的 30% 作为余额奖励；举个例子：',
             ),
             Padding(
               padding: const EdgeInsets.only(left: 32, top: 4),
               child: Text(
                 s['inviteExample'] ??
-                    '(1) A 推荐 B，B 推荐 C；\n'
-                        '(2) B 买年卡会员，A 获得 73 天会员；\n'
-                        '(3) C 买年卡会员，B 获得 73 天会员，A 获得 37 天会员；',
+                    '(1) A 推荐 B；\n'
+                        '(2) B 买年卡 35 USDT，A 获得 10.5 USDT 余额；',
                 style: TextStyle(fontSize: 13, color: Colors.grey.shade700, height: 1.6),
               ),
             ),
@@ -318,7 +369,7 @@ void _showRulesDialog(BuildContext context) {
             ),
             _RuleItem(
               number: '4',
-              text: s['inviteRule4'] ?? '赠送的会员与账户级别一致，如果不是会员，则赠送基础会员。',
+              text: s['inviteRule4'] ?? '余额可用于站内购买会员，也可提现至 Base 链 USDC（满 1000 USDT 可提现）。',
             ),
           ],
         ),
