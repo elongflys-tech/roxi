@@ -4,9 +4,9 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: 'Version number (e.g. 1.0.1)'
+        description: 'Version number (e.g. 1.0.2)'
         required: true
-        default: '1.0.1'
+        default: '1.0.2'
 
 env:
   FLUTTER_VERSION: '3.38.5'
