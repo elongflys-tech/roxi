@@ -1,0 +1,90 @@
+name: Build macOS and Upload to R2
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version number (e.g. 1.0.2)'
+        required: true
+        default: '1.0.2'
+
+env:
+  FLUTTER_VERSION: '3.38.5'
+
+jobs:
+  build-macos:
+    runs-on: macos-latest
+    defaults:
+      run:
+        working-directory: hiddify-app
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2.21.0
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: 'stable'
+          cache: true
+
+      - name: Get dependencies
+        run: flutter pub get
+
+      - name: Download macOS core libs
+        run: |
+          mkdir -p hiddify-core/bin
+          curl -L https://github.com/hiddify/hiddify-next-core/releases/download/draft/hiddify-lib-macos-universal.tar.gz | tar xz -C hiddify-core/bin/
+          ls -lh hiddify-core/bin/
+
+      - name: Install CocoaPods
+        run: |
+          cd macos
+          pod install --repo-update || pod install
+
+      - name: Generate code
+        run: |
+          make get gen translate || true
+          dart run build_runner build --delete-conflicting-outputs || true
+
+      - name: Build macOS
+        run: flutter build macos --release
+
+      - name: Create DMG
+        run: |
+          APP_PATH="build/macos/Build/Products/Release/Roxi.app"
+          DMG_NAME="Roxi-v${{ github.event.inputs.version }}-macos.dmg"
+          mkdir -p out
+          TEMP_DMG="out/temp.dmg"
+          VOLUME_NAME="Roxi"
+          hdiutil create -size 200m -fs HFS+ -volname "$VOLUME_NAME" "$TEMP_DMG"
+          MOUNT_DIR=$(hdiutil attach "$TEMP_DMG" | grep "Volumes" | awk '{print $3}')
+          cp -R "$APP_PATH" "$MOUNT_DIR/"
+          ln -s /Applications "$MOUNT_DIR/Applications"
+          hdiutil detach "$MOUNT_DIR"
+          hdiutil convert "$TEMP_DMG" -format UDZO -o "out/$DMG_NAME"
+          rm "$TEMP_DMG"
+          ls -lh out/
+
+      - name: Upload to R2
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+        run: |
+          R2_EP="https://bd237e8588122632a186921f28ebdfee.r2.cloudflarestorage.com"
+          pip install awscli -q
+          aws configure set aws_access_key_id "$AWS_ACCESS_KEY_ID"
+          aws configure set aws_secret_access_key "$AWS_SECRET_ACCESS_KEY"
+          aws configure set default.region auto
+          DMG_NAME="Roxi-v${{ github.event.inputs.version }}-macos.dmg"
+          aws s3 cp "out/$DMG_NAME" "s3://app-downloads/$DMG_NAME" --endpoint-url "$R2_EP" --content-type "application/x-apple-diskimage"
+          aws s3 cp "s3://app-downloads/$DMG_NAME" "s3://app-downloads/roxi-latest.dmg" --endpoint-url "$R2_EP"
+          echo "Done! https://dl.roxi.cc/roxi-latest.dmg"
+
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v6
+        if: always()
+        with:
+          name: macos-build
+          path: hiddify-app/out/
+          retention-days: 7
