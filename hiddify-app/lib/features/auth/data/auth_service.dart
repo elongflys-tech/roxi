@@ -23,6 +23,10 @@ class AuthService {
   static DateTime? _inviteInfoCacheTime;
   static const _inviteInfoCacheTTL = Duration(seconds: 60);
 
+  static Map<String, String>? _inviteTextCache;
+  static DateTime? _inviteTextCacheTime;
+  static const _inviteTextCacheTTL = Duration(minutes: 30);
+
   static const _tokenKey = 'roxi_token';
   static const _emailKey = 'roxi_email';
   static const _deviceIdKey = 'roxi_device_id';
@@ -368,5 +372,34 @@ class AuthService {
     } catch (_) {
       // Fire-and-forget, don't block on failure
     }
+  }
+
+  /// Fetch server-driven invite text strings (cached 30min).
+  /// Returns a Map<String, String> of invite-related i18n keys, or null on error.
+  Future<Map<String, String>?> getInviteText(String lang, {bool forceRefresh = false}) async {
+    if (!forceRefresh &&
+        _inviteTextCache != null &&
+        _inviteTextCacheTime != null &&
+        DateTime.now().difference(_inviteTextCacheTime!) < _inviteTextCacheTTL) {
+      return _inviteTextCache!;
+    }
+    try {
+      final resp = await http.get(
+        Uri.parse('$baseUrl/api/user/config/invite-text?lang=$lang'),
+        headers: {'Content-Type': 'application/json; charset=utf-8'},
+      );
+      if (resp.statusCode == 200) {
+        final data = jsonDecode(_body(resp));
+        final texts = Map<String, String>.from(data['texts'] ?? {});
+        if (texts.isNotEmpty) {
+          _inviteTextCache = texts;
+          _inviteTextCacheTime = DateTime.now();
+        }
+        return texts;
+      }
+    } catch (_) {}
+    // Return stale cache on error
+    if (_inviteTextCache != null) return _inviteTextCache!;
+    return null;
   }
 }
