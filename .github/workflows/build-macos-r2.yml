@@ -50,23 +50,70 @@ jobs:
       - name: Build macOS
         run: flutter build macos --release
 
-      - name: Create DMG
+      - name: Ad-hoc code sign
+        run: |
+          APP_PATH="build/macos/Build/Products/Release/Roxi.app"
+          echo "Signing all frameworks and dylibs..."
+          find "$APP_PATH" \( -name "*.framework" -o -name "*.dylib" \) | while read f; do
+            codesign --force --deep -s - "$f" 2>/dev/null || true
+          done
+          echo "Signing main app bundle..."
+          codesign --force --deep -s - "$APP_PATH"
+          echo "Verifying signature..."
+          codesign -vvv "$APP_PATH" || true
+
+      - name: Generate DMG background
+        run: |
+          pip install Pillow -q
+          python3 -c "
+          from PIL import Image, ImageDraw;
+          W, H = 540, 300;
+          img = Image.new('RGBA', (W, H), (237, 237, 237, 255));
+          overlay = Image.new('RGBA', (W, H), (0, 0, 0, 0));
+          d = ImageDraw.Draw(overlay);
+          cx, cy = W // 2, 125;
+          x1, x2 = cx - 30, cx + 30;
+          d.rounded_rectangle([x1, cy - 1, x2 - 8, cy + 2], radius=2, fill=(160, 160, 165, 180));
+          d.polygon([(x2 - 10, cy - 7), (x2 + 2, cy), (x2 - 10, cy + 7)], fill=(140, 140, 148, 200));
+          img = Image.alpha_composite(img, overlay);
+          img.convert('RGB').save('/tmp/dmg_bg.png');
+          print('Background generated')
+          "
+
+      - name: Create styled DMG
         run: |
           APP_PATH="build/macos/Build/Products/Release/Roxi.app"
           DMG_NAME="Roxi-v${{ github.event.inputs.version }}-macos.dmg"
-          mkdir -p out
-          TEMP_DMG="out/temp.dmg"
-          VOLUME_NAME="Roxi"
+          STAGING="/tmp/dmg_staging"
+          TMP_DMG="/tmp/roxi_tmp.dmg"
+          VOL_NAME="Roxi"
+
+          rm -rf "$STAGING"
+          mkdir -p "$STAGING/.background"
+          cp -R "$APP_PATH" "$STAGING/Roxi.app"
+          ln -s /Applications "$STAGING/Applications"
+          cp /tmp/dmg_bg.png "$STAGING/.background/bg.png"
+
           APP_SIZE=$(du -sm "$APP_PATH" | awk '{print $1}')
-          DMG_SIZE=$(( APP_SIZE + 50 ))
+          DMG_SIZE=$(( APP_SIZE + 80 ))
           echo "App size: ${APP_SIZE}MB, DMG size: ${DMG_SIZE}MB"
-          hdiutil create -size ${DMG_SIZE}m -fs HFS+ -volname "$VOLUME_NAME" "$TEMP_DMG"
-          MOUNT_DIR=$(hdiutil attach "$TEMP_DMG" | grep "Volumes" | awk '{print $3}')
-          cp -R "$APP_PATH" "$MOUNT_DIR/"
-          ln -s /Applications "$MOUNT_DIR/Applications"
-          hdiutil detach "$MOUNT_DIR"
-          hdiutil convert "$TEMP_DMG" -format UDZO -o "out/$DMG_NAME"
-          rm "$TEMP_DMG"
+
+          hdiutil create -volname "$VOL_NAME" -srcfolder "$STAGING" -format UDRW -fs HFS+ -size ${DMG_SIZE}m "$TMP_DMG"
+          MOUNT_OUT=$(hdiutil attach "$TMP_DMG" -readwrite -noverify -noautoopen)
+          MOUNT_DIR=$(echo "$MOUNT_OUT" | grep "Volumes" | awk '{print $3}')
+          echo "Mounted at: $MOUNT_DIR"
+          sleep 3
+
+          printf '%s\n' 'tell application "Finder"' 'tell disk "Roxi"' 'open' 'delay 1' 'set current view of container window to icon view' 'set toolbar visible of container window to false' 'set statusbar visible of container window to false' 'set the bounds of container window to {200, 200, 740, 500}' 'set viewOptions to the icon view options of container window' 'set arrangement of viewOptions to not arranged' 'set icon size of viewOptions to 96' 'set background picture of viewOptions to file ".background:bg.png"' 'delay 1' 'set position of item "Roxi.app" of container window to {140, 120}' 'set position of item "Applications" of container window to {400, 120}' 'update without registering applications' 'delay 1' 'close' 'end tell' 'end tell' > /tmp/style_dmg.scpt
+          osascript /tmp/style_dmg.scpt || echo "AppleScript styling failed (non-fatal)"
+          sleep 2
+
+          hdiutil detach "$MOUNT_DIR" -force || hdiutil detach "/Volumes/Roxi" -force || true
+          sleep 1
+          mkdir -p out
+          hdiutil convert "$TMP_DMG" -format UDZO -o "out/$DMG_NAME"
+          rm -f "$TMP_DMG"
+          rm -rf "$STAGING"
           ls -lh out/
 
       - name: Upload to R2
