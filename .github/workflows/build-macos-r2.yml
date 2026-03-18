@@ -34,7 +34,7 @@ jobs:
       - name: Download macOS core libs
         run: |
           mkdir -p hiddify-core/bin
-          curl -L https://github.com/hiddify/hiddify-next-core/releases/download/draft/hiddify-lib-macos-universal.tar.gz | tar xz -C hiddify-core/bin/
+          curl -fL https://github.com/hiddify/hiddify-next-core/releases/download/draft/hiddify-lib-macos.tar.gz | tar xz -C hiddify-core/bin/
           ls -lh hiddify-core/bin/
 
       - name: Install CocoaPods
