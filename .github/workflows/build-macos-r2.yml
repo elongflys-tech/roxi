@@ -57,7 +57,10 @@ jobs:
           mkdir -p out
           TEMP_DMG="out/temp.dmg"
           VOLUME_NAME="Roxi"
-          hdiutil create -size 200m -fs HFS+ -volname "$VOLUME_NAME" "$TEMP_DMG"
+          APP_SIZE=$(du -sm "$APP_PATH" | awk '{print $1}')
+          DMG_SIZE=$(( APP_SIZE + 50 ))
+          echo "App size: ${APP_SIZE}MB, DMG size: ${DMG_SIZE}MB"
+          hdiutil create -size ${DMG_SIZE}m -fs HFS+ -volname "$VOLUME_NAME" "$TEMP_DMG"
           MOUNT_DIR=$(hdiutil attach "$TEMP_DMG" | grep "Volumes" | awk '{print $3}')
           cp -R "$APP_PATH" "$MOUNT_DIR/"
           ln -s /Applications "$MOUNT_DIR/Applications"
