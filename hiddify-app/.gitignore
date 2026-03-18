@@ -50,6 +50,10 @@ migrate_working_dir/
 /assets/core/*
 !/assets/core/.gitkeep
 
+# Core binary libs (downloaded in CI)
+/hiddify-core/bin/
+/android/app/libs/*.aar
+
 # Symbolication related
 app.*.symbols
 
