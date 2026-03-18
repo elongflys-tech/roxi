@@ -10,6 +10,7 @@ import 'package:hiddify/core/router/dialog/widgets/custom_alert_dialog.dart';
 import 'package:hiddify/core/theme/theme_extensions.dart';
 import 'package:hiddify/core/widget/animated_text.dart';
 import 'package:hiddify/features/auth/data/auth_service.dart';
+import 'package:hiddify/features/auth/data/auto_sub_import.dart';
 import 'package:hiddify/features/auth/widget/trial_expired_dialog.dart';
 import 'package:hiddify/features/connection/model/connection_status.dart';
 import 'package:hiddify/features/connection/notifier/connection_notifier.dart';
@@ -137,6 +138,16 @@ class ConnectionButton extends HookConsumerWidget {
           }
           // Check profile exists before proceeding
           if (ref.read(activeProfileProvider).valueOrNull == null) {
+            // No active profile — try auto-importing subscription first
+            final imported = await ref.read(autoSubImportProvider.notifier).forceImport();
+            if (imported && ref.read(activeProfileProvider).valueOrNull != null) {
+              // Profile now exists — proceed to connect
+              if (await ref.read(dialogNotifierProvider.notifier).showExperimentalFeatureNotice()) {
+                await ref.read(connectionNotifierProvider.notifier).toggleConnection();
+              }
+              return;
+            }
+            // Still no profile after retry — show manual add prompt
             await ref.read(dialogNotifierProvider.notifier).showNoActiveProfile();
             ref.read(bottomSheetsNotifierProvider.notifier).showAddProfile();
             return; // Don't continue to toggle — wait for profile to be added
