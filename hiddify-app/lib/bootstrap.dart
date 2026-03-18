@@ -130,14 +130,35 @@ Future<void> lazyBootstrap(WidgetsBinding widgetsBinding, Environment env) async
   );
 
   // Auto-add subscription URL from Roxi auth flow (must be after hiddify-core init)
+  // Try up to 3 times with increasing delay if upsertRemote fails
   if (_pendingSubscriptionUrl != null) {
     await _safeInit("auto-add subscription", () async {
       final repo = container.read(profileRepositoryProvider).requireValue;
-      final result = await repo.upsertRemote(_pendingSubscriptionUrl!).run();
-      result.fold(
-        (failure) => Logger.bootstrap.warning("failed to auto-add subscription: $failure"),
-        (_) => Logger.bootstrap.info("subscription auto-added: $_pendingSubscriptionUrl"),
-      );
+
+      bool added = false;
+      for (int attempt = 1; attempt <= 3; attempt++) {
+        final result = await repo.upsertRemote(_pendingSubscriptionUrl!).run();
+        result.fold(
+          (failure) {
+            Logger.bootstrap.warning("auto-add subscription attempt $attempt/3 failed: $failure");
+          },
+          (_) {
+            Logger.bootstrap.info("subscription auto-added: $_pendingSubscriptionUrl");
+            added = true;
+          },
+        );
+        if (added) break;
+        // Wait before retry: 2s, 4s
+        if (attempt < 3) {
+          await Future.delayed(Duration(seconds: attempt * 2));
+        }
+      }
+
+      if (!added) {
+        Logger.bootstrap.warning("auto-add subscription failed after 3 attempts, will retry on connect");
+        return;
+      }
+
       // Set the newly added profile as active
       final profiles = await repo.watchAll().first;
       final profileList = profiles.getOrElse((_) => []);
