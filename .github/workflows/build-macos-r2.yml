@@ -81,7 +81,7 @@ jobs:
           aws configure set default.region auto
           DMG_NAME="Roxi-v${{ github.event.inputs.version }}-macos.dmg"
           aws s3 cp "out/$DMG_NAME" "s3://app-downloads/$DMG_NAME" --endpoint-url "$R2_EP" --content-type "application/x-apple-diskimage"
-          aws s3 cp "s3://app-downloads/$DMG_NAME" "s3://app-downloads/roxi-latest.dmg" --endpoint-url "$R2_EP"
+          aws s3 cp "out/$DMG_NAME" "s3://app-downloads/roxi-latest.dmg" --endpoint-url "$R2_EP" --content-type "application/x-apple-diskimage"
           echo "Done! https://dl.roxi.cc/roxi-latest.dmg"
 
       - name: Upload Artifact
