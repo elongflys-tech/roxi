@@ -64,7 +64,7 @@ jobs:
 
       - name: Generate DMG background
         run: |
-          pip install Pillow -q
+          python3 -m pip install Pillow -q
           python3 -c "
           from PIL import Image, ImageDraw;
           W, H = 540, 300;
