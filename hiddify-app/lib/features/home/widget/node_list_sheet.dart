@@ -91,7 +91,18 @@ class NodeListPage extends HookConsumerWidget {
     }, []);
 
     return Scaffold(
+      appBar: AppBar(
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back_rounded),
+          onPressed: () => Navigator.of(context).pop(),
+        ),
+        title: Text(s['nodeList'] ?? '节点列表', style: theme.textTheme.titleMedium),
+        centerTitle: true,
+        elevation: 0,
+        scrolledUnderElevation: 0,
+      ),
       body: SafeArea(
+        top: false,
         child: !isConnected
           ? _ShowcaseNodeList(
               onConnect: () async {
@@ -262,6 +273,7 @@ class _ShowcaseNodeList extends HookWidget {
 }
 
 /// Connected node list — real proxy data grouped by country with radio selection.
+/// Merges showcase paid nodes (locked) so the full node catalog is always visible.
 /// When expired: all nodes shown with lock style, tapping opens plans.
 class _ConnectedNodeList extends HookConsumerWidget {
   final AsyncValue<OutboundGroup?> proxiesAsync;
@@ -275,24 +287,35 @@ class _ConnectedNodeList extends HookConsumerWidget {
     final theme = Theme.of(context);
     final s = AuthI18n.t;
 
+    // Fetch showcase nodes to merge paid ones into the list
+    final showcaseNodes = useState<List<Map<String, dynamic>>>([]);
+    useEffect(() {
+      () async {
+        final prefs = await SharedPreferences.getInstance();
+        final auth = AuthService(prefs);
+        showcaseNodes.value = await auth.getShowcaseNodes();
+      }();
+      return null;
+    }, []);
+
     return proxiesAsync.when(
       data: (group) {
         if (group == null || group.items.isEmpty) {
-          return const Center(child: Text('暂无节点'));
+          // Even with no real proxies, show showcase nodes
+          if (showcaseNodes.value.isEmpty) {
+            return const Center(child: Text('暂无节点'));
+          }
         }
-        final nodes = group.items.where((n) => !n.isGroup && n.tag.isNotEmpty).toList();
-        if (nodes.isEmpty) {
-          return const Center(child: Text('暂无节点'));
-        }
+        final realNodes = (group?.items ?? []).where((n) => !n.isGroup && n.tag.isNotEmpty).toList();
 
-        // Group by country
+        // Group real nodes by country
         final grouped = <String, List<OutboundInfo>>{};
-        for (final n in nodes) {
+        for (final n in realNodes) {
           final country = _extractCountry(n.tagDisplay);
           grouped.putIfAbsent(country, () => []).add(n);
         }
 
-        // Determine free countries
+        // Determine which countries have free (体验) real nodes
         final freeCountries = <String>{};
         for (final entry in grouped.entries) {
           if (entry.value.any((n) => _isFreeNode(n.tagDisplay))) {
@@ -300,8 +323,37 @@ class _ConnectedNodeList extends HookConsumerWidget {
           }
         }
 
-        // Sort: free first
-        final sortedCountries = grouped.keys.toList()
+        // Collect showcase paid nodes whose country is NOT already in real nodes
+        final realCountries = grouped.keys.toSet();
+        final extraPaidNodes = <Map<String, dynamic>>[];
+        for (final sn in showcaseNodes.value) {
+          final tier = sn['tier'] as String? ?? '';
+          if (tier == 'paid') {
+            // Always add paid showcase nodes — they show as locked
+            extraPaidNodes.add(sn);
+          } else if (tier == 'free') {
+            // Add free showcase nodes only if that country has no real nodes
+            final name = sn['name'] as String? ?? '';
+            if (!realCountries.any((c) => name.contains(c))) {
+              extraPaidNodes.add(sn);
+            }
+          }
+        }
+
+        // Group extra paid nodes by a simple label
+        final extraGrouped = <String, List<Map<String, dynamic>>>{};
+        for (final n in extraPaidNodes) {
+          final name = n['name'] as String? ?? '';
+          // Extract country from showcase name
+          String country = '其他';
+          for (final c in ['香港', '台湾', '日本', '新加坡', '美国', '韩国', '英国', '德国', '法国', '澳大利亚', '加拿大', '荷兰', '印度', '巴西', '土耳其', '俄罗斯', '阿根廷', '爱尔兰', '阿联酋', '澳门']) {
+            if (name.contains(c)) { country = c; break; }
+          }
+          extraGrouped.putIfAbsent(country, () => []).add(n);
+        }
+
+        // Build sorted country list: free real nodes first, then paid real, then extra showcase
+        final sortedRealCountries = grouped.keys.toList()
           ..sort((a, b) {
             final aFree = freeCountries.contains(a);
             final bFree = freeCountries.contains(b);
@@ -310,31 +362,25 @@ class _ConnectedNodeList extends HookConsumerWidget {
             return a.compareTo(b);
           });
 
+        // Extra countries not already in real nodes
+        final extraCountries = extraGrouped.keys.where((c) => !realCountries.contains(c)).toList()..sort();
+
         final activeTag = activeProxy?.tag ?? '';
 
-        // When expired: all nodes are locked, no free/paid distinction
+        // When expired: all nodes are locked
         if (isExpired) {
-          return ListView.builder(
+          return ListView(
             padding: const EdgeInsets.symmetric(vertical: 8),
-            itemCount: sortedCountries.length,
-            itemBuilder: (ctx, i) {
-              final country = sortedCountries[i];
-              final countryNodes = grouped[country]!;
-
-              return Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  _SectionHeader(
-                    label: country,
-                    count: countryNodes.length,
-                    color: Colors.orange,
-                    locked: true,
-                  ),
+            children: [
+              // Real nodes (all locked when expired)
+              ...sortedRealCountries.expand((country) {
+                final countryNodes = grouped[country]!;
+                return [
+                  _SectionHeader(label: country, count: countryNodes.length, color: Colors.orange, locked: true),
                   ...countryNodes.map((node) {
                     final delay = node.urlTestDelay;
                     final hasDelay = delay > 0 && delay < 65000;
                     final cc = NodeListCard.inferCountryCode(node.tagDisplay, node.ipinfo.countryCode);
-
                     return _RadioNodeTile(
                       leading: IPCountryFlag(countryCode: cc, organization: node.ipinfo.org, size: 28),
                       title: NodeListCard.cleanTag(node.tagDisplay),
@@ -345,24 +391,36 @@ class _ConnectedNodeList extends HookConsumerWidget {
                       onTap: () => showPlansSheet(context),
                     );
                   }),
-                ],
-              );
-            },
+                ];
+              }),
+              // Extra showcase paid nodes (locked)
+              if (extraCountries.isNotEmpty) ...[
+                _SectionHeader(label: s['paidRegion']!, count: extraPaidNodes.length, color: Colors.orange, locked: true),
+                ...extraCountries.expand((country) {
+                  final nodes = extraGrouped[country]!;
+                  return nodes.map((n) => _RadioNodeTile(
+                    leading: IPCountryFlag(countryCode: n['cc'] as String? ?? '', organization: '', size: 28),
+                    title: '${n['name']}|${n['tag']}',
+                    subtitle: s['paidRegion'],
+                    isSelected: false,
+                    locked: true,
+                    onTap: () => showPlansSheet(context),
+                  ));
+                }),
+              ],
+            ],
           );
         }
 
-        // Not expired: normal behavior
-        return ListView.builder(
+        // Not expired: free nodes selectable, paid nodes locked
+        return ListView(
           padding: const EdgeInsets.symmetric(vertical: 8),
-          itemCount: sortedCountries.length,
-          itemBuilder: (ctx, i) {
-            final country = sortedCountries[i];
-            final countryNodes = grouped[country]!;
-            final isFree = freeCountries.contains(country);
-
-            return Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
+          children: [
+            // Real proxy nodes grouped by country
+            ...sortedRealCountries.expand((country) {
+              final countryNodes = grouped[country]!;
+              final isFree = freeCountries.contains(country);
+              return [
                 _SectionHeader(
                   label: country,
                   count: countryNodes.length,
@@ -374,7 +432,6 @@ class _ConnectedNodeList extends HookConsumerWidget {
                   final delay = node.urlTestDelay;
                   final hasDelay = delay > 0 && delay < 65000;
                   final cc = NodeListCard.inferCountryCode(node.tagDisplay, node.ipinfo.countryCode);
-
                   return _RadioNodeTile(
                     leading: IPCountryFlag(countryCode: cc, organization: node.ipinfo.org, size: 28),
                     title: NodeListCard.cleanTag(node.tagDisplay),
@@ -387,16 +444,31 @@ class _ConnectedNodeList extends HookConsumerWidget {
                         showPlansSheet(context);
                         return;
                       }
-                      if (!isSelected) {
+                      if (!isSelected && group != null) {
                         await ref.read(proxiesOverviewNotifierProvider.notifier)
                             .changeProxy(group.tag, node.tag);
                       }
                     },
                   );
                 }),
-              ],
-            );
-          },
+              ];
+            }),
+            // Extra showcase paid nodes (countries not in real proxies)
+            if (extraCountries.isNotEmpty) ...[
+              _SectionHeader(label: s['paidRegion']!, count: extraPaidNodes.length, color: Colors.orange, locked: true),
+              ...extraCountries.expand((country) {
+                final nodes = extraGrouped[country]!;
+                return nodes.map((n) => _RadioNodeTile(
+                  leading: IPCountryFlag(countryCode: n['cc'] as String? ?? '', organization: '', size: 28),
+                  title: '${n['name']}|${n['tag']}',
+                  subtitle: s['paidRegion'],
+                  isSelected: false,
+                  locked: true,
+                  onTap: () => showPlansSheet(context),
+                ));
+              }),
+            ],
+          ],
         );
       },
       error: (_, __) => const Center(child: Text('加载失败')),
