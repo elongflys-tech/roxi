@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:hiddify/features/auth/data/device_fingerprint.dart';
 
 /// Service for communicating with our business backend API.
 class AuthService {
@@ -108,6 +109,7 @@ class AuthService {
 
   /// Auto device register — no email/password needed.
   /// Generates a device_id on first launch, reuses it on subsequent launches.
+  /// Sends hardware fingerprint and environment flags for anti-abuse.
   Future<String?> deviceRegister() async {
     try {
       String? devId = _prefs.getString(_deviceIdKey);
@@ -116,10 +118,27 @@ class AuthService {
             (hashCode ^ DateTime.now().microsecond).toRadixString(36);
         await _prefs.setString(_deviceIdKey, devId);
       }
+
+      // Collect hardware fingerprint and env detection in parallel
+      String? hwFp;
+      int envFlags = 0;
+      try {
+        final results = await Future.wait([
+          _getHwFingerprint(),
+          _getEnvFlags(),
+        ]);
+        hwFp = results[0] as String?;
+        envFlags = results[1] as int;
+      } catch (_) {}
+
+      final body = <String, dynamic>{'device_id': devId};
+      if (hwFp != null && hwFp.isNotEmpty) body['hw_fingerprint'] = hwFp;
+      if (envFlags > 0) body['env_flags'] = envFlags;
+
       final resp = await _postWithFallback(
         '/api/auth/device-register',
         headers: {'Content-Type': 'application/json'},
-        body: jsonEncode({'device_id': devId}),
+        body: jsonEncode(body),
       );
       if (resp != null) {
         final data = jsonDecode(_body(resp));
@@ -129,6 +148,22 @@ class AuthService {
       return '网络连接失败，请检查网络';
     } catch (e) {
       return '网络错误: $e';
+    }
+  }
+
+  static Future<String?> _getHwFingerprint() async {
+    try {
+      return await DeviceFingerprint.getHardwareFingerprint();
+    } catch (_) {
+      return null;
+    }
+  }
+
+  static Future<int> _getEnvFlags() async {
+    try {
+      return await DeviceFingerprint.detectEnvironment();
+    } catch (_) {
+      return 0;
     }
   }
 
@@ -357,6 +392,21 @@ class AuthService {
     try {
       final resp = await _postWithFallback(
         '/api/user/trial-heartbeat',
+        headers: _headers,
+      );
+      if (resp != null) {
+        return jsonDecode(_body(resp));
+      }
+    } catch (_) {}
+    return null;
+  }
+
+  /// Claim daily trial (30min). Only works for device-registered users.
+  /// Must be called explicitly from the client — trial is NOT auto-granted.
+  Future<Map<String, dynamic>?> claimTrial() async {
+    try {
+      final resp = await _postWithFallback(
+        '/api/auth/claim-trial',
         headers: _headers,
       );
       if (resp != null) {
