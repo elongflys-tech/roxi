@@ -41,6 +41,8 @@ class HomePage extends HookConsumerWidget {
     final trialChecked = useState(false);
     final expireDate = useState<String?>(null);
     final isPaidUser = useState(false);
+    final neverClaimed = useState(false); // true if user never claimed trial
+    final claimingTrial = useState(false); // loading state for claim button
 
     // Check trial status on mount
     useEffect(() {
@@ -65,8 +67,9 @@ class HomePage extends HookConsumerWidget {
           if (status != null) {
             trialStatus.value = status['status'] as String?;
             trialRemainingSec.value = status['remaining_sec'] as int? ?? 0;
+            neverClaimed.value = status['never_claimed'] == true;
             trialChecked.value = true;
-            if (status['status'] == 'expired' && context.mounted) {
+            if (status['status'] == 'expired' && !neverClaimed.value && context.mounted) {
               Future.delayed(const Duration(milliseconds: 500), () {
                 if (context.mounted) showTrialExpiredDialog(context);
               });
@@ -147,6 +150,66 @@ class HomePage extends HookConsumerWidget {
     // Build the left-side status widget for the top bar
     Widget buildStatusLabel() {
       final s = AuthI18n.t;
+      // Never claimed trial — show tappable "claim trial" label
+      if (trialChecked.value && neverClaimed.value && trialStatus.value == 'expired' && !isPaidUser.value) {
+        return GestureDetector(
+          onTap: () async {
+            if (claimingTrial.value) return;
+            claimingTrial.value = true;
+            try {
+              final prefs = await SharedPreferences.getInstance();
+              final auth = AuthService(prefs);
+              final result = await auth.claimTrial();
+              if (result != null && result['status'] == 'trial') {
+                trialStatus.value = 'trial';
+                trialRemainingSec.value = result['remaining_sec'] as int? ?? 1800;
+                neverClaimed.value = false;
+                if (context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text(s['claimTrialSuccess']!)),
+                  );
+                }
+              } else {
+                if (context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text(s['claimTrialFail']!)),
+                  );
+                }
+              }
+            } catch (_) {
+              if (context.mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text(s['claimTrialFail']!)),
+                );
+              }
+            } finally {
+              claimingTrial.value = false;
+            }
+          },
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                colors: [Colors.blue.shade400, Colors.cyan.shade300],
+              ),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: claimingTrial.value
+                ? const SizedBox(
+                    width: 14, height: 14,
+                    child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                  )
+                : Text(
+                    s['claimTrial']!,
+                    style: const TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      color: Colors.white,
+                    ),
+                  ),
+          ),
+        );
+      }
       // Trial active — show countdown
       if (trialChecked.value && trialStatus.value == 'trial') {
         final min = trialRemainingSec.value ~/ 60;
@@ -190,15 +253,41 @@ class HomePage extends HookConsumerWidget {
           ),
         );
       }
-      // Paid user — show expire date compactly
+      // Paid user — show expire date only if within 7 days of expiry
       if (isPaidUser.value && expireDate.value != null) {
         final ed = expireDate.value!;
-        final short = ed.length >= 10 ? ed.substring(0, 10) : ed;
+        try {
+          final expDt = DateTime.parse(ed);
+          final daysLeft = expDt.difference(DateTime.now()).inDays;
+          if (daysLeft <= 7) {
+            final short = ed.length >= 10 ? ed.substring(0, 10) : ed;
+            return GestureDetector(
+              onTap: () => showPlansSheet(context),
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                decoration: BoxDecoration(
+                  color: Colors.orange.shade50,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: Colors.orange.shade200, width: 0.5),
+                ),
+                child: Text(
+                  '⏳ $short',
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    color: Colors.orange.shade700,
+                  ),
+                ),
+              ),
+            );
+          }
+        } catch (_) {}
+        // More than 7 days left — just show "Roxi"
         return Text(
-          short,
-          style: TextStyle(
-            fontSize: 12,
-            color: theme.colorScheme.onSurfaceVariant,
+          'Roxi',
+          style: theme.textTheme.titleMedium?.copyWith(
+            fontWeight: FontWeight.w600,
+            color: theme.colorScheme.primary,
           ),
         );
       }
