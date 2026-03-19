@@ -150,6 +150,7 @@ class AuthI18n {
       'networkErrorDesc': '无法连接到服务器，请检查本地网络是否正常或者重新尝试',
       'networkGotIt': '知道了',
       'networkRetry': '重试',
+      'nodeList': '节点列表',
     },
     'en': {
       'tagline': 'Dawn breaks, freedom arrives',
@@ -266,6 +267,7 @@ class AuthI18n {
       'networkErrorDesc': 'Unable to connect to the server. Please check your network connection or try again.',
       'networkGotIt': 'OK',
       'networkRetry': 'Retry',
+      'nodeList': 'Nodes',
     },
     'fa': {
       'tagline': 'سحرگاه حرکت، آزادی فرا می‌رسد',
@@ -381,6 +383,7 @@ class AuthI18n {
       'networkErrorDesc': 'اتصال به سرور ممکن نیست. لطفاً اتصال شبکه خود را بررسی کنید.',
       'networkGotIt': 'باشه',
       'networkRetry': 'تلاش مجدد',
+      'nodeList': 'لیست نودها',
     },
     'ru': {
       'tagline': 'Рассвет наступает, свобода приходит',
@@ -496,6 +499,7 @@ class AuthI18n {
       'networkErrorDesc': 'Не удалось подключиться к серверу. Проверьте подключение к сети.',
       'networkGotIt': 'ОК',
       'networkRetry': 'Повторить',
+      'nodeList': 'Узлы',
     },
     'ar': {
       'tagline': 'الفجر يبزغ، والحرية تأتي',
@@ -611,6 +615,7 @@ class AuthI18n {
       'networkErrorDesc': 'تعذر الاتصال بالخادم. يرجى التحقق من اتصال الشبكة.',
       'networkGotIt': 'حسناً',
       'networkRetry': 'إعادة المحاولة',
+      'nodeList': 'العقد',
     },
   };
 }
