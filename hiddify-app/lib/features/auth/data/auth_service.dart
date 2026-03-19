@@ -5,6 +5,54 @@ import 'package:shared_preferences/shared_preferences.dart';
 /// Service for communicating with our business backend API.
 class AuthService {
   static const String baseUrl = 'https://roxi.cc';
+  static const List<String> _fallbackUrls = [
+    'https://roxi.cc',
+    'https://roxijet.cloud',
+  ];
+
+  /// Try GET request across all fallback domains. Returns first successful response.
+  static Future<http.Response?> _getWithFallback(
+    String path, {
+    Map<String, String>? headers,
+    Duration timeout = const Duration(seconds: 8),
+  }) async {
+    for (int i = 0; i < _fallbackUrls.length; i++) {
+      if (i > 0) await Future.delayed(Duration(milliseconds: 800 * i));
+      try {
+        final resp = await http.get(
+          Uri.parse('${_fallbackUrls[i]}$path'),
+          headers: headers,
+        ).timeout(timeout);
+        if (resp.statusCode == 200) return resp;
+      } catch (_) {
+        // Try next domain after backoff
+      }
+    }
+    return null;
+  }
+
+  /// Try POST request across all fallback domains. Returns first successful response.
+  static Future<http.Response?> _postWithFallback(
+    String path, {
+    Map<String, String>? headers,
+    String? body,
+    Duration timeout = const Duration(seconds: 8),
+  }) async {
+    for (int i = 0; i < _fallbackUrls.length; i++) {
+      if (i > 0) await Future.delayed(Duration(milliseconds: 800 * i));
+      try {
+        final resp = await http.post(
+          Uri.parse('${_fallbackUrls[i]}$path'),
+          headers: headers,
+          body: body,
+        ).timeout(timeout);
+        if (resp.statusCode == 200) return resp;
+      } catch (_) {
+        // Try next domain after backoff
+      }
+    }
+    return null;
+  }
 
   // In-memory cache for plans (avoid re-fetching on every sheet open)
   static List<Map<String, dynamic>>? _plansCache;
@@ -68,18 +116,17 @@ class AuthService {
             (hashCode ^ DateTime.now().microsecond).toRadixString(36);
         await _prefs.setString(_deviceIdKey, devId);
       }
-      final resp = await http.post(
-        Uri.parse('$baseUrl/api/auth/device-register'),
+      final resp = await _postWithFallback(
+        '/api/auth/device-register',
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode({'device_id': devId}),
       );
-      if (resp.statusCode == 200) {
+      if (resp != null) {
         final data = jsonDecode(_body(resp));
         await _prefs.setString(_tokenKey, data['access_token']);
         return null;
       }
-      final err = jsonDecode(_body(resp));
-      return err['detail'] ?? '设备注册失败';
+      return '网络连接失败，请检查网络';
     } catch (e) {
       return '网络错误: $e';
     }
@@ -166,11 +213,8 @@ class AuthService {
 
   Future<Map<String, dynamic>?> getSubscription() async {
     try {
-      final resp = await http.get(
-        Uri.parse('$baseUrl/api/user/subscription'),
-        headers: _headers,
-      );
-      if (resp.statusCode == 200) {
+      final resp = await _getWithFallback('/api/user/subscription', headers: _headers);
+      if (resp != null) {
         return jsonDecode(_body(resp));
       }
     } catch (_) {}
@@ -186,11 +230,8 @@ class AuthService {
       return _plansCache!;
     }
     try {
-      final resp = await http.get(
-        Uri.parse('$baseUrl/api/plans/'),
-        headers: _headers,
-      );
-      if (resp.statusCode == 200) {
+      final resp = await _getWithFallback('/api/plans/', headers: _headers);
+      if (resp != null) {
         final data = List<Map<String, dynamic>>.from(jsonDecode(_body(resp)));
         if (data.isNotEmpty) { _plansCache = data; _plansCacheTime = DateTime.now(); }
         return data;
@@ -202,17 +243,15 @@ class AuthService {
   }
 
   /// Get showcase node list (works without VPN connection).
+  /// Uses multi-domain fallback to survive GFW blocking.
   Future<List<Map<String, dynamic>>> getShowcaseNodes({bool forceRefresh = false}) async {
     if (!forceRefresh && _nodesCache != null && _nodesCacheTime != null &&
         DateTime.now().difference(_nodesCacheTime!) < _nodesCacheTTL) {
       return _nodesCache!;
     }
     try {
-      final resp = await http.get(
-        Uri.parse('$baseUrl/api/nodes/showcase'),
-        headers: _headers,
-      );
-      if (resp.statusCode == 200) {
+      final resp = await _getWithFallback('/api/nodes/showcase', headers: _headers);
+      if (resp != null) {
         final data = List<Map<String, dynamic>>.from(jsonDecode(_body(resp)));
         if (data.isNotEmpty) { _nodesCache = data; _nodesCacheTime = DateTime.now(); }
         return data;
@@ -280,11 +319,8 @@ class AuthService {
 
   Future<Map<String, dynamic>?> getUserInfo() async {
     try {
-      final resp = await http.get(
-        Uri.parse('$baseUrl/api/user/me'),
-        headers: _headers,
-      );
-      if (resp.statusCode == 200) {
+      final resp = await _getWithFallback('/api/user/me', headers: _headers);
+      if (resp != null) {
         return jsonDecode(_body(resp));
       }
     } catch (_) {}
@@ -307,11 +343,8 @@ class AuthService {
   /// Check trial status from backend.
   Future<Map<String, dynamic>?> getTrialStatus() async {
     try {
-      final resp = await http.get(
-        Uri.parse('$baseUrl/api/user/trial-status'),
-        headers: _headers,
-      );
-      if (resp.statusCode == 200) {
+      final resp = await _getWithFallback('/api/user/trial-status', headers: _headers);
+      if (resp != null) {
         return jsonDecode(_body(resp));
       }
     } catch (_) {}
@@ -322,11 +355,11 @@ class AuthService {
   /// Returns updated remaining_sec or null on error.
   Future<Map<String, dynamic>?> trialHeartbeat() async {
     try {
-      final resp = await http.post(
-        Uri.parse('$baseUrl/api/user/trial-heartbeat'),
+      final resp = await _postWithFallback(
+        '/api/user/trial-heartbeat',
         headers: _headers,
       );
-      if (resp.statusCode == 200) {
+      if (resp != null) {
         return jsonDecode(_body(resp));
       }
     } catch (_) {}
@@ -372,6 +405,18 @@ class AuthService {
     } catch (_) {
       // Fire-and-forget, don't block on failure
     }
+  }
+
+  /// Quick connectivity check — tries HEAD on all fallback domains.
+  /// Returns true if at least one domain responds within timeout.
+  static Future<bool> isApiReachable({Duration timeout = const Duration(seconds: 6)}) async {
+    for (final base in _fallbackUrls) {
+      try {
+        final resp = await http.head(Uri.parse('$base/api/plans/')).timeout(timeout);
+        if (resp.statusCode < 500) return true;
+      } catch (_) {}
+    }
+    return false;
   }
 
   /// Fetch server-driven invite text strings (cached 30min).
