@@ -4,9 +4,9 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: 'Version number (e.g. 1.0.1)'
+        description: 'Version number (e.g. 1.0.2)'
         required: true
-        default: '1.0.1'
+        default: '1.0.2'
 
 env:
   FLUTTER_VERSION: '3.38.5'
@@ -58,7 +58,12 @@ jobs:
           New-Item -ItemType Directory -Path "out" -Force | Out-Null
           $buildDir = "build\windows\x64\runner\Release"
           if (Test-Path $buildDir) {
-            Compress-Archive -Path "$buildDir\*" -DestinationPath "out\roxi-win-${{ github.event.inputs.version }}.zip"
+            # 列出构建产物，确认 data/ 目录存在
+            Write-Host "=== Build output ==="
+            Get-ChildItem -Path $buildDir -Recurse -Depth 2 | Select-Object FullName, Length
+            
+            # 用 7zip 打包（比 Compress-Archive 可靠，正确处理子目录）
+            7z a -tzip "out\roxi-win-${{ github.event.inputs.version }}.zip" "$buildDir\*" -r
             Copy-Item "out\roxi-win-${{ github.event.inputs.version }}.zip" "out\roxi-latest.zip"
             $exe = Get-ChildItem -Path $buildDir -Filter "*.exe" | Select-Object -First 1
             if ($exe) {
