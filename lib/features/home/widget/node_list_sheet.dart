@@ -69,19 +69,22 @@ class NodeListPage extends HookConsumerWidget {
           final auth = AuthService(prefs);
           if (!auth.isLoggedIn) { expiryChecked.value = true; return; }
           final status = await auth.getTrialStatus();
-          if (status != null && status['status'] == 'expired') {
-            isExpired.value = true;
+          if (status != null) {
+            // paid 或 free 都不算过期，只有 expired 才锁节点
+            if (status['status'] == 'expired') {
+              isExpired.value = true;
+            }
+            // paid 和 free 用户都可以用节点
             expiryChecked.value = true;
             return;
           }
+          // 兜底：检查 userInfo 的 tier
           final userInfo = await auth.getUserInfo();
           if (userInfo != null) {
-            final ed = userInfo['expire_date'];
-            if (ed != null && ed.toString().isNotEmpty) {
-              final expDate = DateTime.tryParse(ed.toString());
-              if (expDate != null && expDate.isBefore(DateTime.now())) {
-                isExpired.value = true;
-              }
+            final tier = userInfo['tier'] as String? ?? 'free';
+            if (tier == 'vip' || tier == 'svip') {
+              // VIP/SVIP 永远不过期
+              isExpired.value = false;
             }
           }
         } catch (_) {}

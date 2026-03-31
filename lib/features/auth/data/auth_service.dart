@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:io';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:hiddify/features/auth/data/device_fingerprint.dart';
@@ -134,6 +135,7 @@ class AuthService {
       final body = <String, dynamic>{'device_id': devId};
       if (hwFp != null && hwFp.isNotEmpty) body['hw_fingerprint'] = hwFp;
       if (envFlags > 0) body['env_flags'] = envFlags;
+      body['platform'] = Platform.operatingSystem;  // "android", "ios", "windows", "macos", "linux"
 
       final resp = await _postWithFallback(
         '/api/auth/device-register',
@@ -414,6 +416,53 @@ class AuthService {
       }
     } catch (_) {}
     return null;
+  }
+
+  /// Claim daily trial (30min). Only works for device-registered users.
+  /// Must be called explicitly from the client — trial is NOT auto-granted.
+  Future<Map<String, dynamic>?> claimTrial() async {
+    try {
+      final resp = await _postWithFallback(
+        '/api/auth/claim-trial',
+        headers: _headers,
+      );
+      if (resp != null) {
+        return jsonDecode(_body(resp));
+      }
+    } catch (_) {}
+    return null;
+  }
+
+  /// Check for app updates. Returns version info or null.
+  Future<Map<String, dynamic>?> checkAppUpdate() async {
+    try {
+      final resp = await _getWithFallback('/api/app/version');
+      if (resp != null) {
+        return jsonDecode(_body(resp));
+      }
+    } catch (_) {}
+    return null;
+  }
+
+  /// Refresh JWT token before it expires. Call periodically (e.g. every 12h).
+  /// Returns true if token was refreshed successfully.
+  Future<bool> refreshToken() async {
+    if (!isLoggedIn) return false;
+    try {
+      final resp = await _postWithFallback(
+        '/api/auth/refresh-token',
+        headers: _headers,
+      );
+      if (resp != null) {
+        final data = jsonDecode(_body(resp));
+        final newToken = data['access_token'] as String?;
+        if (newToken != null && newToken.isNotEmpty) {
+          await _prefs.setString(_tokenKey, newToken);
+          return true;
+        }
+      }
+    } catch (_) {}
+    return false;
   }
 
   Future<String?> changePassword(String oldPassword, String newPassword) async {

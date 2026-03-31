@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:hiddify/features/auth/data/auth_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -28,6 +29,9 @@ class AuthGate extends HookWidget {
           errorMsg.value = err;
           return;
         }
+        // Check clipboard for invite code from web download flow
+        // Format: "roxi-invite:XXXXX"
+        await _tryApplyClipboardInvite(auth, prefs);
       }
 
       // Fetch subscription URL
@@ -88,4 +92,27 @@ class AuthGate extends HookWidget {
       ),
     );
   }
+}
+
+/// Read clipboard for invite code planted by the web download page.
+/// Only runs once (first launch). Clears clipboard after use.
+const _inviteAppliedKey = 'roxi_clipboard_invite_applied';
+
+Future<void> _tryApplyClipboardInvite(AuthService auth, SharedPreferences prefs) async {
+  if (prefs.getBool(_inviteAppliedKey) == true) return; // already tried once
+  try {
+    final data = await Clipboard.getData(Clipboard.kTextPlain);
+    final text = data?.text?.trim() ?? '';
+    if (text.startsWith('roxi-invite:') && text.length > 12) {
+      final code = text.substring(12).trim();
+      if (code.isNotEmpty && code.length <= 20) {
+        await auth.applyInvite(code);
+        // Clear the clipboard so it doesn't re-trigger
+        await Clipboard.setData(const ClipboardData(text: ''));
+      }
+    }
+  } catch (_) {
+    // Clipboard access may fail on some devices — ignore
+  }
+  await prefs.setBool(_inviteAppliedKey, true);
 }

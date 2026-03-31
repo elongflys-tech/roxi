@@ -9,6 +9,8 @@ import 'package:hiddify/features/auth/data/auto_sub_import.dart';
 import 'package:hiddify/features/auth/data/auth_service.dart';
 import 'package:hiddify/features/auth/data/auth_i18n.dart';
 import 'package:hiddify/features/auth/widget/guide_card.dart';
+import 'package:hiddify/features/auth/widget/update_dialog.dart';
+import 'package:hiddify/core/model/constants.dart';
 import 'package:hiddify/features/auth/widget/profile_page.dart';
 import 'package:hiddify/features/auth/widget/network_error_dialog.dart';
 import 'package:hiddify/features/auth/widget/trial_expired_dialog.dart';
@@ -69,7 +71,12 @@ class HomePage extends HookConsumerWidget {
             trialRemainingSec.value = status['remaining_sec'] as int? ?? 0;
             neverClaimed.value = status['never_claimed'] == true;
             trialChecked.value = true;
-            if (status['status'] == 'expired' && !neverClaimed.value && context.mounted) {
+            // status == 'paid' 表示 VIP/SVIP 用户
+            if (status['status'] == 'paid') {
+              isPaidUser.value = true;
+            }
+            // 只有真正过期的付费用户才弹过期对话框
+            if (status['status'] == 'expired' && context.mounted) {
               Future.delayed(const Duration(milliseconds: 500), () {
                 if (context.mounted) showTrialExpiredDialog(context);
               });
@@ -77,14 +84,37 @@ class HomePage extends HookConsumerWidget {
           }
           final userInfo = await auth.getUserInfo();
           if (userInfo != null) {
+            final tier = userInfo['tier'] as String? ?? 'free';
+            if (tier == 'vip' || tier == 'svip') {
+              isPaidUser.value = true;
+            }
             final ed = userInfo['expire_date'];
             if (ed != null && ed.toString().isNotEmpty) {
               expireDate.value = ed.toString();
-              isPaidUser.value = true;
             }
           }
           // Prefetch plans so the sheet opens instantly
           auth.getPlans(); auth.getShowcaseNodes();
+          // Refresh token proactively (token expires in 24h)
+          auth.refreshToken();
+          // Check for app update
+          final updateInfo = await auth.checkAppUpdate();
+          if (updateInfo != null) {
+            final serverCode = updateInfo['latest_version_code'] as int? ?? 0;
+            if (serverCode > Constants.appVersionCode && context.mounted) {
+              Future.delayed(const Duration(milliseconds: 800), () {
+                if (context.mounted) {
+                  showUpdateDialog(
+                    context,
+                    latestVersion: updateInfo['latest_version'] ?? '',
+                    downloadUrl: updateInfo['download_url'] ?? '',
+                    changelog: updateInfo['changelog'],
+                    force: updateInfo['force_update'] == true,
+                  );
+                }
+              });
+            }
+          }
         } catch (_) {}
       }();
       return null;

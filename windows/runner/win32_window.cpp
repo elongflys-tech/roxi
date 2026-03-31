@@ -255,6 +255,56 @@ Win32Window::MessageHandler(HWND hwnd,
     }
     return 0;
 
+  case WM_PAINT:
+  {
+    if (showing_splash_)
+    {
+      PAINTSTRUCT ps;
+      HDC hdc = BeginPaint(hwnd, &ps);
+
+      // Fill background with white
+      RECT rect;
+      GetClientRect(hwnd, &rect);
+      HBRUSH whiteBrush = CreateSolidBrush(RGB(255, 255, 255));
+      FillRect(hdc, &rect, whiteBrush);
+      DeleteObject(whiteBrush);
+
+      // Load and draw the splash bitmap centered
+      HBITMAP hBitmap = LoadBitmap(GetModuleHandle(nullptr), MAKEINTRESOURCE(IDB_SPLASH_IMAGE));
+      if (hBitmap)
+      {
+        BITMAP bm;
+        GetObject(hBitmap, sizeof(bm), &bm);
+
+        int clientW = rect.right - rect.left;
+        int clientH = rect.bottom - rect.top;
+        int x = (clientW - bm.bmWidth) / 2;
+        int y = (clientH - bm.bmHeight) / 2;
+
+        HDC hdcMem = CreateCompatibleDC(hdc);
+        HGDIOBJ oldBitmap = SelectObject(hdcMem, hBitmap);
+        BitBlt(hdc, x, y, bm.bmWidth, bm.bmHeight, hdcMem, 0, 0, SRCCOPY);
+        SelectObject(hdcMem, oldBitmap);
+        DeleteDC(hdcMem);
+        DeleteObject(hBitmap);
+      }
+
+      EndPaint(hwnd, &ps);
+      return 0;
+    }
+    break;
+  }
+
+  case WM_ERASEBKGND:
+  {
+    if (showing_splash_)
+    {
+      // Prevent flicker — WM_PAINT handles everything
+      return 1;
+    }
+    break;
+  }
+
   case WM_DPICHANGED:
   {
     auto newRectSize = reinterpret_cast<RECT *>(lparam);
@@ -312,6 +362,19 @@ Win32Window *Win32Window::GetThisFromHandle(HWND const window) noexcept
 {
   return reinterpret_cast<Win32Window *>(
       GetWindowLongPtr(window, GWLP_USERDATA));
+}
+
+void Win32Window::DismissSplash()
+{
+  if (showing_splash_)
+  {
+    showing_splash_ = false;
+    // Force repaint to clear the splash
+    if (window_handle_)
+    {
+      InvalidateRect(window_handle_, nullptr, TRUE);
+    }
+  }
 }
 
 void Win32Window::SetChildContent(HWND content)

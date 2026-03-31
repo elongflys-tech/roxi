@@ -57,6 +57,9 @@ public:
   // If true, closing this window will quit the application.
   void SetQuitOnClose(bool quit_on_close);
 
+  // Dismiss the splash screen overlay.
+  void DismissSplash();
+
   // Return a RECT representing the bounds of the current client area.
   RECT GetClientArea();
 
@@ -96,6 +99,9 @@ private:
   static void UpdateTheme(HWND const window);
 
   bool quit_on_close_ = false;
+
+  // Whether the splash screen is still showing.
+  bool showing_splash_ = true;
 
   // window handle for top level window.
   HWND window_handle_ = nullptr;

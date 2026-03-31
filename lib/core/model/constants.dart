@@ -8,6 +8,7 @@ abstract class Constants {
   static const githubReleasesApiUrl = "https://api.github.com/repos/elongflys-tech/roxi/releases";
   static const githubLatestReleaseUrl = "https://dl.roxi.cc";
   static const appCastUrl = "https://raw.githubusercontent.com/elongflys-tech/roxi/main/appcast.xml";
+  static const int appVersionCode = 103; // bump this on each release
   static const telegramChannelUrl = "https://t.me/Roxifree";
   static const privacyPolicyUrl = "https://hiddify.com/privacy-policy/";
   static const termsAndConditionsUrl = "https://hiddify.com/terms/";

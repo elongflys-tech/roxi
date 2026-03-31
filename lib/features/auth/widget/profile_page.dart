@@ -48,9 +48,10 @@ class ProfilePage extends HookWidget {
     final deviceId = userInfo.value?['device_id'] ?? '';
     final expireDate = userInfo.value?['expire_date'];
     final trafficLimit = (userInfo.value?['traffic_limit_gb'] ?? 0).toDouble();
-    final isPaid = expireDate != null && expireDate.toString().isNotEmpty;
-    final tierLabel = isPaid ? (trafficLimit == 0 ? s['svipTier']! : s['vipTier']!) : s['freeTier']!;
-    final tierColor = isPaid ? (trafficLimit == 0 ? Colors.amber : Colors.blue) : Colors.grey;
+    final tier = (userInfo.value?['tier'] as String?) ?? 'free';
+    final isPaid = tier == 'vip' || tier == 'svip';
+    final tierLabel = isPaid ? (tier == 'svip' ? s['svipTier']! : s['vipTier']!) : s['freeTier']!;
+    final tierColor = isPaid ? (tier == 'svip' ? Colors.amber : Colors.blue) : Colors.grey;
     final invCode = inviteInfo.value?['invite_code'] ?? '';
     final invCount = inviteInfo.value?['invited_count'] ?? 0;
     final bonusDays = inviteInfo.value?['bonus_days'] ?? 0;

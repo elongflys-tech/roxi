@@ -155,6 +155,9 @@ class AuthI18n {
       'networkGotIt': '知道了',
       'networkRetry': '重试',
       'nodeList': '节点列表',
+      'updateAvailable': '发现新版本',
+      'updateNow': '立即更新',
+      'updateLater': '稍后再说',
     },
     'en': {
       'tagline': 'Dawn breaks, freedom arrives',
@@ -276,6 +279,9 @@ class AuthI18n {
       'networkGotIt': 'OK',
       'networkRetry': 'Retry',
       'nodeList': 'Nodes',
+      'updateAvailable': 'New Version Available',
+      'updateNow': 'Update Now',
+      'updateLater': 'Later',
     },
     'fa': {
       'tagline': 'سحرگاه حرکت، آزادی فرا می‌رسد',
@@ -396,6 +402,9 @@ class AuthI18n {
       'networkGotIt': 'باشه',
       'networkRetry': 'تلاش مجدد',
       'nodeList': 'لیست نودها',
+      'updateAvailable': 'نسخه جدید موجود است',
+      'updateNow': 'بروزرسانی',
+      'updateLater': 'بعداً',
     },
     'ru': {
       'tagline': 'Рассвет наступает, свобода приходит',
@@ -516,6 +525,9 @@ class AuthI18n {
       'networkGotIt': 'ОК',
       'networkRetry': 'Повторить',
       'nodeList': 'Узлы',
+      'updateAvailable': 'Доступна новая версия',
+      'updateNow': 'Обновить',
+      'updateLater': 'Позже',
     },
     'ar': {
       'tagline': 'الفجر يبزغ، والحرية تأتي',
@@ -636,6 +648,9 @@ class AuthI18n {
       'networkGotIt': 'حسناً',
       'networkRetry': 'إعادة المحاولة',
       'nodeList': 'العقد',
+      'updateAvailable': 'يتوفر إصدار جديد',
+      'updateNow': 'تحديث الآن',
+      'updateLater': 'لاحقاً',
     },
   };
 }

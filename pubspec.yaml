@@ -37,6 +37,7 @@ dependencies:
   # shared_preferences_android: ^2.4.8
   dio: ^5.4.1
   http: ^1.2.0
+  crypto: ^3.0.3
   ffi: ^2.1.2
   path_provider: ^2.1.1
   mobile_scanner: ^7.2.0
@@ -194,6 +195,7 @@ flutter_native_splash:
   android_12:
     color: "#ffffff"
     image: assets/images/source/ic_launcher_foreground.png
+  web: false
 
 ffigen:
   name: "HiddifyCoreNativeLibrary"
