@@ -37,14 +37,11 @@ class HomePage extends HookConsumerWidget {
     final t = ref.watch(translationsProvider).requireValue;
     final activeProfile = ref.watch(activeProfileProvider);
 
-    // Trial status
+    // User status
     final trialStatus = useState<String?>(null);
-    final trialRemainingSec = useState<int>(0);
     final trialChecked = useState(false);
     final expireDate = useState<String?>(null);
     final isPaidUser = useState(false);
-    final neverClaimed = useState(false); // true if user never claimed trial
-    final claimingTrial = useState(false); // loading state for claim button
 
     // Check trial status on mount
     useEffect(() {
@@ -68,14 +65,12 @@ class HomePage extends HookConsumerWidget {
           final status = await auth.getTrialStatus();
           if (status != null) {
             trialStatus.value = status['status'] as String?;
-            trialRemainingSec.value = status['remaining_sec'] as int? ?? 0;
-            neverClaimed.value = status['never_claimed'] == true;
             trialChecked.value = true;
-            // status == 'paid' 表示 VIP/SVIP 用户
             if (status['status'] == 'paid') {
               isPaidUser.value = true;
             }
-            // 只有真正过期的付费用户才弹过期对话框
+            // "free" 用户是永久免费，不弹任何对话框
+            // "expired" 只有付费到期用户才会收到，弹升级提示
             if (status['status'] == 'expired' && context.mounted) {
               Future.delayed(const Duration(milliseconds: 500), () {
                 if (context.mounted) showTrialExpiredDialog(context);
@@ -120,49 +115,11 @@ class HomePage extends HookConsumerWidget {
       return null;
     }, []);
 
-    // Real-time countdown timer
+    // Connection status for UI
     final connectionStatus = ref.watch(
       connectionNotifierProvider.select((v) => v.valueOrNull ?? const Disconnected()),
     );
     final isConnected = connectionStatus == const Connected();
-
-    useEffect(() {
-      if (trialStatus.value != 'trial' || trialRemainingSec.value <= 0) return null;
-      if (!isConnected) return null;
-
-      final ticker = Stream.periodic(const Duration(seconds: 1));
-      final sub = ticker.listen((_) {
-        if (trialRemainingSec.value > 0) {
-          trialRemainingSec.value = trialRemainingSec.value - 1;
-        }
-        if (trialRemainingSec.value <= 0) {
-          trialStatus.value = 'expired';
-          if (context.mounted) showTrialExpiredDialog(context);
-        }
-      });
-
-      final heartbeat = Stream.periodic(const Duration(seconds: 10));
-      final hbSub = heartbeat.listen((_) async {
-        try {
-          final prefs = await SharedPreferences.getInstance();
-          final auth = AuthService(prefs);
-          final result = await auth.trialHeartbeat();
-          if (result != null) {
-            final serverRemaining = result['remaining_sec'] as int? ?? 0;
-            trialRemainingSec.value = serverRemaining;
-            if (result['status'] == 'expired') {
-              trialStatus.value = 'expired';
-              if (context.mounted) showTrialExpiredDialog(context);
-            }
-          }
-        } catch (_) {}
-      });
-
-      return () {
-        sub.cancel();
-        hbSub.cancel();
-      };
-    }, [trialStatus.value, trialChecked.value, isConnected]);
 
     // Auto-import subscription if no profile exists
     final autoImportDone = useRef(false);
@@ -195,66 +152,28 @@ class HomePage extends HookConsumerWidget {
                 trialRemainingSec.value = result['remaining_sec'] as int? ?? 1800;
                 neverClaimed.value = false;
                 if (context.mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text(s['claimTrialSuccess']!)),
-                  );
-                }
-              } else {
-                if (context.mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text(s['claimTrialFail']!)),
-                  );
-                }
-              }
-            } catch (_) {
-              if (context.mounted) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text(s['claimTrialFail']!)),
-                );
-              }
-            } finally {
-              claimingTrial.value = false;
-            }
-          },
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                colors: [Colors.blue.shade400, Colors.cyan.shade300],
-              ),
-              borderRadius: BorderRadius.circular(12),
+    Widget buildStatusLabel() {
+      final s = AuthI18n.t;
+      // Free user — show "Roxi Free" label
+      if (trialChecked.value && trialStatus.value == 'free') {
+        return Container(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+          decoration: BoxDecoration(
+            color: Colors.green.shade50,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: Colors.green.shade200, width: 0.5),
+          ),
+          child: Text(
+            'Roxi Free',
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+              color: Colors.green.shade700,
             ),
-            child: claimingTrial.value
-                ? const SizedBox(
-                    width: 14, height: 14,
-                    child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
-                  )
-                : Text(
-                    s['claimTrial']!,
-                    style: const TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w600,
-                      color: Colors.white,
-                    ),
-                  ),
           ),
         );
       }
-      // Trial active — show countdown
-      if (trialChecked.value && trialStatus.value == 'trial') {
-        final min = trialRemainingSec.value ~/ 60;
-        final sec = trialRemainingSec.value % 60;
-        final timeStr = '${min.toString().padLeft(2, '0')}:${sec.toString().padLeft(2, '0')}';
-        return Text(
-          '${s['trialBadge']} $timeStr',
-          style: TextStyle(
-            fontSize: 13,
-            fontWeight: FontWeight.w600,
-            color: Colors.orange.shade700,
-          ),
-        );
-      }
-      // Expired — tappable red label
+      // Expired paid user — tappable red label
       if (trialChecked.value && trialStatus.value == 'expired') {
         return GestureDetector(
           onTap: () => showPlansSheet(context),
@@ -380,10 +299,7 @@ class HomePage extends HookConsumerWidget {
                             ],
                           ),
                         ),
-                        GuideCard(
-                          isTrialActive: trialChecked.value && trialStatus.value == 'trial',
-                          trialRemainingSec: trialRemainingSec.value,
-                        ),
+                        GuideCard(),
                         SliverFillRemaining(
                           hasScrollBody: false,
                           child: Column(
