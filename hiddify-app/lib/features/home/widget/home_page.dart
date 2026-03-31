@@ -137,23 +137,6 @@ class HomePage extends HookConsumerWidget {
     // Build the left-side status widget for the top bar
     Widget buildStatusLabel() {
       final s = AuthI18n.t;
-      // Never claimed trial — show tappable "claim trial" label
-      if (trialChecked.value && neverClaimed.value && trialStatus.value == 'expired' && !isPaidUser.value) {
-        return GestureDetector(
-          onTap: () async {
-            if (claimingTrial.value) return;
-            claimingTrial.value = true;
-            try {
-              final prefs = await SharedPreferences.getInstance();
-              final auth = AuthService(prefs);
-              final result = await auth.claimTrial();
-              if (result != null && result['status'] == 'trial') {
-                trialStatus.value = 'trial';
-                trialRemainingSec.value = result['remaining_sec'] as int? ?? 1800;
-                neverClaimed.value = false;
-                if (context.mounted) {
-    Widget buildStatusLabel() {
-      final s = AuthI18n.t;
       // Free user — show "Roxi Free" label
       if (trialChecked.value && trialStatus.value == 'free') {
         return Container(
