@@ -65,7 +65,9 @@ jobs:
             $stageDir = "out\Roxi"
             New-Item -ItemType Directory -Path $stageDir -Force | Out-Null
             Copy-Item -Path "$buildDir\*" -Destination $stageDir -Recurse
-            7z a -tzip "out\roxi-win-${{ github.event.inputs.version }}.zip" "out\Roxi" -r
+            Push-Location out
+            7z a -tzip "roxi-win-${{ github.event.inputs.version }}.zip" "Roxi" -r
+            Pop-Location
             Copy-Item "out\roxi-win-${{ github.event.inputs.version }}.zip" "out\roxi-latest.zip"
             Remove-Item -Recurse -Force $stageDir
 
