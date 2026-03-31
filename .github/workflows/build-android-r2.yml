@@ -4,9 +4,9 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: 'Version number (e.g. 1.0.2)'
+        description: 'Version number (e.g. 1.0.4)'
         required: true
-        default: '1.0.2'
+        default: '1.0.4'
 
 env:
   FLUTTER_VERSION: '3.38.5'
@@ -15,9 +15,6 @@ env:
 jobs:
   build-android:
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: hiddify-app
     steps:
       - name: Checkout
         uses: actions/checkout@v6
@@ -56,8 +53,7 @@ jobs:
           dart run build_runner build --delete-conflicting-outputs || true
 
       - name: Build APK
-        run: |
-          flutter build apk --release --split-per-abi --target-platform android-arm64
+        run: flutter build apk --release --split-per-abi --target-platform android-arm64
 
       - name: Package APK
         run: |
@@ -75,15 +71,8 @@ jobs:
           aws configure set aws_access_key_id "$AWS_ACCESS_KEY_ID"
           aws configure set aws_secret_access_key "$AWS_SECRET_ACCESS_KEY"
           aws configure set default.region auto
-
-          aws s3 cp "out/roxi-arm64-v${{ github.event.inputs.version }}.apk" \
-            "s3://app-downloads/roxi-arm64-v${{ github.event.inputs.version }}.apk" \
-            --endpoint-url "$R2_EP" --content-type "application/vnd.android.package-archive"
-
-          aws s3 cp "s3://app-downloads/roxi-arm64-v${{ github.event.inputs.version }}.apk" \
-            "s3://app-downloads/roxi-latest.apk" \
-            --endpoint-url "$R2_EP"
-
+          aws s3 cp "out/roxi-arm64-v${{ github.event.inputs.version }}.apk" "s3://app-downloads/roxi-arm64-v${{ github.event.inputs.version }}.apk" --endpoint-url "$R2_EP" --content-type "application/vnd.android.package-archive"
+          aws s3 cp "s3://app-downloads/roxi-arm64-v${{ github.event.inputs.version }}.apk" "s3://app-downloads/roxi-latest.apk" --endpoint-url "$R2_EP"
           echo "Done! https://dl.roxi.cc/roxi-latest.apk"
 
       - name: Upload Artifact
@@ -91,5 +80,5 @@ jobs:
         if: always()
         with:
           name: android-build
-          path: hiddify-app/out/
+          path: out/
           retention-days: 7
