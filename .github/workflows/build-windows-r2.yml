@@ -4,9 +4,9 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: 'Version number (e.g. 1.0.2)'
+        description: 'Version number (e.g. 1.0.4)'
         required: true
-        default: '1.0.2'
+        default: '1.0.4'
 
 env:
   FLUTTER_VERSION: '3.38.5'
@@ -52,24 +52,23 @@ jobs:
       - name: Build Windows
         run: flutter build windows --release
 
-      - name: Package EXE
+      - name: Package ZIP
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Path "out" -Force | Out-Null
           $buildDir = "build\windows\x64\runner\Release"
           if (Test-Path $buildDir) {
-            # 列出构建产物，确认 data/ 目录存在
             Write-Host "=== Build output ==="
-            Get-ChildItem -Path $buildDir -Recurse -Depth 2 | Select-Object FullName, Length
-            
-            # 用 7zip 打包（比 Compress-Archive 可靠，正确处理子目录）
-            7z a -tzip "out\roxi-win-${{ github.event.inputs.version }}.zip" "$buildDir\*" -r
+            Get-ChildItem -Path $buildDir -Depth 1 | Select-Object Name, Length
+
+            # Create a clean Roxi folder, copy everything into it, then zip
+            $stageDir = "out\Roxi"
+            New-Item -ItemType Directory -Path $stageDir -Force | Out-Null
+            Copy-Item -Path "$buildDir\*" -Destination $stageDir -Recurse
+            7z a -tzip "out\roxi-win-${{ github.event.inputs.version }}.zip" "out\Roxi" -r
             Copy-Item "out\roxi-win-${{ github.event.inputs.version }}.zip" "out\roxi-latest.zip"
-            $exe = Get-ChildItem -Path $buildDir -Filter "*.exe" | Select-Object -First 1
-            if ($exe) {
-              Copy-Item $exe.FullName "out\roxi-win-${{ github.event.inputs.version }}.exe"
-              Copy-Item $exe.FullName "out\roxi-latest.exe"
-            }
+            Remove-Item -Recurse -Force $stageDir
+
             Get-ChildItem out/
           } else {
             Get-ChildItem -Path "build\windows" -Recurse -Depth 3
@@ -88,15 +87,6 @@ jobs:
           aws configure set aws_secret_access_key "$AWS_SECRET_ACCESS_KEY"
           aws configure set default.region auto
 
-          if [ -f "out/roxi-win-${{ github.event.inputs.version }}.exe" ]; then
-            aws s3 cp "out/roxi-win-${{ github.event.inputs.version }}.exe" \
-              "s3://app-downloads/roxi-win-${{ github.event.inputs.version }}.exe" \
-              --endpoint-url "$R2_EP" --content-type "application/x-msdownload"
-            aws s3 cp "out/roxi-latest.exe" \
-              "s3://app-downloads/roxi-latest.exe" \
-              --endpoint-url "$R2_EP" --content-type "application/x-msdownload"
-          fi
-
           if [ -f "out/roxi-win-${{ github.event.inputs.version }}.zip" ]; then
             aws s3 cp "out/roxi-win-${{ github.event.inputs.version }}.zip" \
               "s3://app-downloads/roxi-win-${{ github.event.inputs.version }}.zip" \
@@ -106,7 +96,7 @@ jobs:
               --endpoint-url "$R2_EP" --content-type "application/zip"
           fi
 
-          echo "Done! https://dl.roxi.cc/roxi-latest.exe"
+          echo "Done! https://dl.roxi.cc/roxi-latest.zip"
 
       - name: Upload Artifact
         uses: actions/upload-artifact@v6
