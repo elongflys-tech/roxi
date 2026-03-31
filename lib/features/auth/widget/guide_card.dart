@@ -6,16 +6,9 @@ import 'package:hiddify/features/auth/data/auth_service.dart';
 import 'package:hiddify/features/auth/widget/plans_page.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-/// Guidance card shown on home page: invite + upgrade (with optional trial countdown).
+/// Guidance card shown on home page: invite + upgrade.
 class GuideCard extends HookWidget {
-  const GuideCard({
-    super.key,
-    this.isTrialActive = false,
-    this.trialRemainingSec = 0,
-  });
-
-  final bool isTrialActive;
-  final int trialRemainingSec;
+  const GuideCard({super.key});
 
   @override
   Widget build(BuildContext context) {
@@ -70,76 +63,16 @@ class GuideCard extends HookWidget {
               ),
             ),
             const Divider(height: 1),
-            // Upgrade row — with trial countdown when active
-            if (isTrialActive) ...[
-              _TrialUpgradeRow(
-                remainingSec: trialRemainingSec,
-                onUpgrade: () => showPlansSheet(context),
+            // Upgrade row
+            _GuideRow(
+              icon: Icons.rocket_launch_rounded,
+              iconColor: Colors.orange,
+              title: s['guideUpgrade']!,
+              subtitle: s['guideUpgradeDesc']!,
+              trailing: IconButton(
+                icon: const Icon(Icons.arrow_forward_ios_rounded, size: 16),
+                onPressed: () => showPlansSheet(context),
               ),
-            ] else ...[
-              _GuideRow(
-                icon: Icons.rocket_launch_rounded,
-                iconColor: Colors.orange,
-                title: s['guideUpgrade']!,
-                subtitle: s['guideUpgradeDesc']!,
-                trailing: IconButton(
-                  icon: const Icon(Icons.arrow_forward_ios_rounded, size: 16),
-                  onPressed: () => showPlansSheet(context),
-                ),
-              ),
-            ],
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-/// Trial-active upgrade row: icon + "体验剩余 MM:SS" + 升级套餐 button
-class _TrialUpgradeRow extends StatelessWidget {
-  final int remainingSec;
-  final VoidCallback onUpgrade;
-
-  const _TrialUpgradeRow({
-    required this.remainingSec,
-    required this.onUpgrade,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final s = AuthI18n.t;
-    final mm = (remainingSec ~/ 60).toString().padLeft(2, '0');
-    final ss = (remainingSec % 60).toString().padLeft(2, '0');
-
-    return Container(
-      padding: const EdgeInsets.symmetric(vertical: 8),
-      decoration: BoxDecoration(
-        color: Colors.orange.shade50,
-        borderRadius: BorderRadius.circular(8),
-      ),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 4),
-        child: Row(
-          children: [
-            const Icon(Icons.timer_rounded, size: 18, color: Colors.orange),
-            const SizedBox(width: 8),
-            Text(
-              '${s['trialBanner']} $mm:$ss',
-              style: TextStyle(
-                color: Colors.orange.shade800,
-                fontWeight: FontWeight.w600,
-                fontSize: 13,
-              ),
-            ),
-            const Spacer(),
-            TextButton(
-              onPressed: onUpgrade,
-              style: TextButton.styleFrom(
-                padding: const EdgeInsets.symmetric(horizontal: 12),
-                minimumSize: Size.zero,
-                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-              ),
-              child: Text(s['upgradePlan']!, style: const TextStyle(fontSize: 12)),
             ),
           ],
         ),
