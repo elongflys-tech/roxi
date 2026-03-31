@@ -35,12 +35,12 @@ class UserAvatarBadge extends HookWidget {
             loading.value = false;
             return;
           }
-          // Check trial status first
+          // Check user status
           final trial = await auth.getTrialStatus();
           if (trial != null) {
-            final status = trial['status'] as String? ?? 'expired';
-            if (status == 'trial') {
-              tier.value = 'trial';
+            final status = trial['status'] as String? ?? 'free';
+            if (status == 'free') {
+              tier.value = 'free';
               loading.value = false;
               return;
             }
@@ -153,11 +153,11 @@ class _TierConfig {
 _TierConfig _tierConfig(String tier) {
   final s = AuthI18n.t;
   switch (tier) {
-    case 'trial':
+    case 'free':
       return _TierConfig(
-        ringColor: Colors.orange,
-        badge: s['trialBadge'] ?? '体验',
-        badgeBg: Colors.orange,
+        ringColor: Colors.green,
+        badge: s['freeTier'] ?? '免费',
+        badgeBg: Colors.green,
       );
     case 'expired':
       return _TierConfig(
