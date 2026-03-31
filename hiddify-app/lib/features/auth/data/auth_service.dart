@@ -403,21 +403,6 @@ class AuthService {
     return null;
   }
 
-  /// Claim daily trial (30min). Only works for device-registered users.
-  /// Must be called explicitly from the client — trial is NOT auto-granted.
-  Future<Map<String, dynamic>?> claimTrial() async {
-    try {
-      final resp = await _postWithFallback(
-        '/api/auth/claim-trial',
-        headers: _headers,
-      );
-      if (resp != null) {
-        return jsonDecode(_body(resp));
-      }
-    } catch (_) {}
-    return null;
-  }
-
   /// Check for app updates. Returns version info or null.
   Future<Map<String, dynamic>?> checkAppUpdate() async {
     try {
