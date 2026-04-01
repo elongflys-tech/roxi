@@ -109,18 +109,11 @@ class AuthService {
   }
 
   /// Auto device register — no email/password needed.
-  /// Generates a device_id on first launch, reuses it on subsequent launches.
-  /// Sends hardware fingerprint and environment flags for anti-abuse.
+  /// Uses hardware fingerprint as stable device_id (survives reinstall).
+  /// Falls back to random ID only if fingerprint unavailable.
   Future<String?> deviceRegister() async {
     try {
-      String? devId = _prefs.getString(_deviceIdKey);
-      if (devId == null || devId.isEmpty) {
-        devId = DateTime.now().millisecondsSinceEpoch.toRadixString(36) +
-            (hashCode ^ DateTime.now().microsecond).toRadixString(36);
-        await _prefs.setString(_deviceIdKey, devId);
-      }
-
-      // Collect hardware fingerprint and env detection in parallel
+      // Collect hardware fingerprint first — this is the stable device identity
       String? hwFp;
       int envFlags = 0;
       try {
@@ -131,6 +124,20 @@ class AuthService {
         hwFp = results[0] as String?;
         envFlags = results[1] as int;
       } catch (_) {}
+
+      // Device ID: prefer hardware fingerprint (stable across reinstalls)
+      // Fall back to cached random ID, then generate new random as last resort
+      String? devId = _prefs.getString(_deviceIdKey);
+      if (hwFp != null && hwFp.isNotEmpty) {
+        // Use hw fingerprint as device_id — same device = same ID after reinstall
+        devId = hwFp;
+        await _prefs.setString(_deviceIdKey, devId);
+      } else if (devId == null || devId.isEmpty) {
+        // No fingerprint available — generate random (legacy fallback)
+        devId = DateTime.now().millisecondsSinceEpoch.toRadixString(36) +
+            (hashCode ^ DateTime.now().microsecond).toRadixString(36);
+        await _prefs.setString(_deviceIdKey, devId);
+      }
 
       final body = <String, dynamic>{'device_id': devId};
       if (hwFp != null && hwFp.isNotEmpty) body['hw_fingerprint'] = hwFp;
