@@ -56,14 +56,14 @@ class DeviceFingerprint {
   static Future<List<String>> _androidFingerprint() async {
     final parts = <String>[];
     try {
-      // Read CPU info
+      // CPU hardware (stable across reinstalls and OS updates)
       final cpuInfo = await _readFile('/proc/cpuinfo');
       final hwMatch = RegExp(r'Hardware\s*:\s*(.+)').firstMatch(cpuInfo);
       if (hwMatch != null) parts.add(hwMatch.group(1)!.trim());
       final modelMatch = RegExp(r'model name\s*:\s*(.+)').firstMatch(cpuInfo);
       if (modelMatch != null) parts.add(modelMatch.group(1)!.trim());
 
-      // Memory size (rounded to GB — stable across reboots)
+      // Memory size (rounded to GB — stable)
       final memInfo = await _readFile('/proc/meminfo');
       final memMatch = RegExp(r'MemTotal:\s*(\d+)').firstMatch(memInfo);
       if (memMatch != null) {
@@ -71,11 +71,19 @@ class DeviceFingerprint {
         parts.add('mem${memGb}g');
       }
 
-      // OS build fingerprint
-      final buildProps = await _shellCmd('getprop', ['ro.build.fingerprint']);
-      if (buildProps.isNotEmpty) parts.add(buildProps);
+      // Device model + brand (stable, doesn't change with OS updates)
+      final brand = await _shellCmd('getprop', ['ro.product.brand']);
+      if (brand.isNotEmpty) parts.add(brand);
+      final model = await _shellCmd('getprop', ['ro.product.model']);
+      if (model.isNotEmpty) parts.add(model);
+      final device = await _shellCmd('getprop', ['ro.product.device']);
+      if (device.isNotEmpty) parts.add(device);
 
-      // Display density
+      // Serial number (stable, but may be "unknown" on newer Android)
+      final serial = await _shellCmd('getprop', ['ro.serialno']);
+      if (serial.isNotEmpty && serial != 'unknown') parts.add(serial);
+
+      // Display density (stable)
       final density = await _shellCmd('getprop', ['ro.sf.lcd_density']);
       if (density.isNotEmpty) parts.add('dpi$density');
     } catch (_) {}
@@ -93,11 +101,39 @@ class DeviceFingerprint {
 
   // ── Desktop fingerprint ──
   static Future<List<String>> _desktopFingerprint(String os) async {
-    return [
+    final parts = <String>[
       Platform.operatingSystemVersion,
-      Platform.localHostname,
       Platform.numberOfProcessors.toString(),
     ];
+    try {
+      if (os == 'windows') {
+        // Use WMIC to get motherboard serial + CPU ID (stable across reinstalls)
+        final mbSerial = await _shellCmd('wmic', ['baseboard', 'get', 'serialnumber']);
+        if (mbSerial.isNotEmpty) parts.add(mbSerial.split('\n').last.trim());
+        final cpuId = await _shellCmd('wmic', ['cpu', 'get', 'processorid']);
+        if (cpuId.isNotEmpty) parts.add(cpuId.split('\n').last.trim());
+        final diskSerial = await _shellCmd('wmic', ['diskdrive', 'get', 'serialnumber']);
+        if (diskSerial.isNotEmpty) {
+          final lines = diskSerial.split('\n').where((l) => l.trim().isNotEmpty).toList();
+          if (lines.length > 1) parts.add(lines.last.trim());
+        }
+      } else if (os == 'macos') {
+        // macOS hardware UUID (stable)
+        final hwUuid = await _shellCmd('system_profiler', ['SPHardwareDataType']);
+        final match = RegExp(r'Hardware UUID:\s*(.+)').firstMatch(hwUuid);
+        if (match != null) parts.add(match.group(1)!.trim());
+      } else if (os == 'linux') {
+        // Machine ID (stable across reinstalls on same OS install)
+        final machineId = await _readFile('/etc/machine-id');
+        if (machineId.isNotEmpty) parts.add(machineId.trim());
+        // Also try DMI product UUID
+        final dmiUuid = await _readFile('/sys/class/dmi/id/product_uuid');
+        if (dmiUuid.isNotEmpty) parts.add(dmiUuid.trim());
+      }
+    } catch (_) {}
+    // Always include hostname as fallback
+    parts.add(Platform.localHostname);
+    return parts;
   }
 
   // ── Emulator detection ──
