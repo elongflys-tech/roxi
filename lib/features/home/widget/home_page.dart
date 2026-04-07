@@ -42,6 +42,7 @@ class HomePage extends HookConsumerWidget {
     final trialChecked = useState(false);
     final expireDate = useState<String?>(null);
     final isPaidUser = useState(false);
+    final userTier = useState<String>('free');
 
     // Check trial status on mount
     useEffect(() {
@@ -80,6 +81,7 @@ class HomePage extends HookConsumerWidget {
           final userInfo = await auth.getUserInfo();
           if (userInfo != null) {
             final tier = userInfo['tier'] as String? ?? 'free';
+            userTier.value = tier;
             if (tier == 'vip' || tier == 'svip') {
               isPaidUser.value = true;
             }
@@ -188,6 +190,8 @@ class HomePage extends HookConsumerWidget {
       // Paid user — show expire date only if within 7 days of expiry
       if (isPaidUser.value && expireDate.value != null) {
         final ed = expireDate.value!;
+        final tierLabel = userTier.value == 'svip' ? 'SVIP' : 'VIP';
+        final tierColor = userTier.value == 'svip' ? Colors.amber.shade700 : Colors.blue;
         try {
           final expDt = DateTime.parse(ed);
           final daysLeft = expDt.difference(DateTime.now()).inDays;
@@ -203,7 +207,7 @@ class HomePage extends HookConsumerWidget {
                   border: Border.all(color: Colors.orange.shade200, width: 0.5),
                 ),
                 child: Text(
-                  '⏳ $short',
+                  '⏳ $tierLabel · $short',
                   style: TextStyle(
                     fontSize: 12,
                     fontWeight: FontWeight.w600,
@@ -214,12 +218,24 @@ class HomePage extends HookConsumerWidget {
             );
           }
         } catch (_) {}
-        // More than 7 days left — just show "Roxi"
-        return Text(
-          'Roxi',
-          style: theme.textTheme.titleMedium?.copyWith(
-            fontWeight: FontWeight.w600,
-            color: theme.colorScheme.primary,
+        // More than 7 days left — show tier badge
+        return Container(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+          decoration: BoxDecoration(
+            color: userTier.value == 'svip' ? Colors.amber.shade50 : Colors.blue.shade50,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(
+              color: userTier.value == 'svip' ? Colors.amber.shade200 : Colors.blue.shade200,
+              width: 0.5,
+            ),
+          ),
+          child: Text(
+            'Roxi $tierLabel',
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+              color: tierColor,
+            ),
           ),
         );
       }
