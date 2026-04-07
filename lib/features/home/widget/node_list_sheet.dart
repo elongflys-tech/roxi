@@ -59,6 +59,7 @@ class NodeListPage extends HookConsumerWidget {
 
     // Check if user is expired (no active subscription)
     final isExpired = useState(false);
+    final userTier = useState<String>('free');
 
     // Show loading until expiry check completes
     final expiryChecked = useState(false);
@@ -68,24 +69,29 @@ class NodeListPage extends HookConsumerWidget {
           final prefs = await SharedPreferences.getInstance();
           final auth = AuthService(prefs);
           if (!auth.isLoggedIn) { expiryChecked.value = true; return; }
+          // Fetch user info first for tier
+          final userInfo = await auth.getUserInfo();
+          if (userInfo != null) {
+            final tier = userInfo['tier'] as String? ?? 'free';
+            userTier.value = tier;
+            if (tier == 'vip' || tier == 'svip') {
+              isExpired.value = false;
+              expiryChecked.value = true;
+              return;
+            }
+          }
           final status = await auth.getTrialStatus();
           if (status != null) {
             // paid 或 free 都不算过期，只有 expired 才锁节点
             if (status['status'] == 'expired') {
               isExpired.value = true;
             }
-            // paid 和 free 用户都可以用节点
+            if (status['status'] == 'paid') {
+              // Also update tier from trial-status if getUserInfo missed it
+              if (userTier.value == 'free') userTier.value = 'vip';
+            }
             expiryChecked.value = true;
             return;
-          }
-          // 兜底：检查 userInfo 的 tier
-          final userInfo = await auth.getUserInfo();
-          if (userInfo != null) {
-            final tier = userInfo['tier'] as String? ?? 'free';
-            if (tier == 'vip' || tier == 'svip') {
-              // VIP/SVIP 永远不过期
-              isExpired.value = false;
-            }
           }
         } catch (_) {}
         expiryChecked.value = true;
@@ -120,11 +126,13 @@ class NodeListPage extends HookConsumerWidget {
               },
               isExpired: isExpired.value,
               expiryChecked: expiryChecked.value,
+              userTier: userTier.value,
             )
           : _ConnectedNodeList(
               proxiesAsync: proxiesAsync,
               activeProxy: activeProxy,
               isExpired: isExpired.value,
+              userTier: userTier.value,
             ),
       ),
     );
@@ -167,7 +175,8 @@ class _ShowcaseNodeList extends HookWidget {
   final VoidCallback onConnect;
   final bool isExpired;
   final bool expiryChecked;
-  const _ShowcaseNodeList({required this.onConnect, required this.isExpired, this.expiryChecked = true});
+  final String userTier;
+  const _ShowcaseNodeList({required this.onConnect, required this.isExpired, this.expiryChecked = true, this.userTier = 'free'});
 
   @override
   Widget build(BuildContext context) {
@@ -282,8 +291,9 @@ class _ConnectedNodeList extends HookConsumerWidget {
   final AsyncValue<OutboundGroup?> proxiesAsync;
   final OutboundInfo? activeProxy;
   final bool isExpired;
+  final String userTier;
 
-  const _ConnectedNodeList({required this.proxiesAsync, required this.activeProxy, required this.isExpired});
+  const _ConnectedNodeList({required this.proxiesAsync, required this.activeProxy, required this.isExpired, this.userTier = 'free'});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -415,7 +425,8 @@ class _ConnectedNodeList extends HookConsumerWidget {
           );
         }
 
-        // Not expired: free nodes selectable, paid nodes locked
+        // Not expired: paid users can use all real nodes, free users only free nodes
+        final isPaidUser = userTier == 'vip' || userTier == 'svip';
         return ListView(
           padding: const EdgeInsets.symmetric(vertical: 8),
           children: [
@@ -423,12 +434,13 @@ class _ConnectedNodeList extends HookConsumerWidget {
             ...sortedRealCountries.expand((country) {
               final countryNodes = grouped[country]!;
               final isFree = freeCountries.contains(country);
+              final isUnlocked = isPaidUser || isFree;
               return [
                 _SectionHeader(
                   label: country,
                   count: countryNodes.length,
-                  color: isFree ? Colors.green : Colors.orange,
-                  locked: !isFree,
+                  color: isUnlocked ? Colors.green : Colors.orange,
+                  locked: !isUnlocked,
                 ),
                 ...countryNodes.map((node) {
                   final isSelected = node.tag == activeTag;
@@ -441,9 +453,9 @@ class _ConnectedNodeList extends HookConsumerWidget {
                     subtitle: hasDelay ? '${delay}ms · ${node.type}' : node.type,
                     subtitleColor: hasDelay ? _delayColor(delay) : null,
                     isSelected: isSelected,
-                    locked: !isFree,
+                    locked: !isUnlocked,
                     onTap: () async {
-                      if (!isFree) {
+                      if (!isUnlocked) {
                         showPlansSheet(context);
                         return;
                       }
@@ -456,8 +468,8 @@ class _ConnectedNodeList extends HookConsumerWidget {
                 }),
               ];
             }),
-            // Extra showcase paid nodes (countries not in real proxies)
-            if (extraCountries.isNotEmpty) ...[
+            // Extra showcase paid nodes (countries not in real proxies) — only show for free users
+            if (!isPaidUser && extraCountries.isNotEmpty) ...[
               _SectionHeader(label: s['paidRegion']!, count: extraPaidNodes.length, color: Colors.orange, locked: true),
               ...extraCountries.expand((country) {
                 final nodes = extraGrouped[country]!;
