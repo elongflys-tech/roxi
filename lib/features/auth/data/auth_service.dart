@@ -80,6 +80,9 @@ class AuthService {
   static const _tokenKey = 'roxi_token';
   static const _emailKey = 'roxi_email';
   static const _deviceIdKey = 'roxi_device_id';
+  static const _cachedTierKey = 'roxi_cached_tier';
+  static const _cachedStatusKey = 'roxi_cached_status';
+  static const _cachedExpireDateKey = 'roxi_cached_expire_date';
 
   final SharedPreferences _prefs;
 
@@ -90,6 +93,20 @@ class AuthService {
   String? get deviceId => _prefs.getString(_deviceIdKey);
   bool get isLoggedIn => token != null && token!.isNotEmpty;
   bool get hasEmail => email != null && email!.isNotEmpty;
+
+  /// Cached tier from last successful API call. Works offline.
+  String get cachedTier => _prefs.getString(_cachedTierKey) ?? 'free';
+
+  /// Cached user status from last successful API call. Works offline.
+  String get cachedStatus => _prefs.getString(_cachedStatusKey) ?? 'free';
+
+  /// Quick check: is user VIP or SVIP with active subscription?
+  /// Uses cached data — safe to call offline.
+  bool get isPaidUser {
+    final tier = cachedTier;
+    final status = cachedStatus;
+    return (tier == 'vip' || tier == 'svip') && status != 'expired';
+  }
 
   Map<String, String> get _headers => {
         'Content-Type': 'application/json; charset=utf-8',
@@ -365,9 +382,23 @@ class AuthService {
     try {
       final resp = await _getWithFallback('/api/user/me', headers: _headers);
       if (resp != null) {
-        return jsonDecode(_body(resp));
+        final data = jsonDecode(_body(resp)) as Map<String, dynamic>;
+        // Cache key fields locally for offline access
+        final tier = data['tier'] as String?;
+        if (tier != null) _prefs.setString(_cachedTierKey, tier);
+        final ed = data['expire_date'];
+        if (ed != null) _prefs.setString(_cachedExpireDateKey, ed.toString());
+        return data;
       }
     } catch (_) {}
+    // Offline fallback: return cached data
+    final ct = _prefs.getString(_cachedTierKey);
+    if (ct != null) {
+      return {
+        'tier': ct,
+        'expire_date': _prefs.getString(_cachedExpireDateKey),
+      };
+    }
     return null;
   }
 
@@ -384,14 +415,21 @@ class AuthService {
     return null;
   }
 
-  /// Check trial status from backend.
+  /// Check trial status from backend. Caches result for offline use.
   Future<Map<String, dynamic>?> getTrialStatus() async {
     try {
       final resp = await _getWithFallback('/api/user/trial-status', headers: _headers);
       if (resp != null) {
-        return jsonDecode(_body(resp));
+        final data = jsonDecode(_body(resp)) as Map<String, dynamic>;
+        // Cache status for offline
+        final status = data['status'] as String?;
+        if (status != null) _prefs.setString(_cachedStatusKey, status);
+        return data;
       }
     } catch (_) {}
+    // Offline fallback
+    final cs = _prefs.getString(_cachedStatusKey);
+    if (cs != null) return {'status': cs};
     return null;
   }
 
