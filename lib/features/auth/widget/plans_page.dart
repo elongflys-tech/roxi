@@ -360,8 +360,11 @@ class _PlanCard extends StatelessWidget {
                 ? BorderSide.none
                 : BorderSide(color: Colors.amber.withOpacity(0.5)),
       ),
-      child: Stack(
-        children: [
+      child: InkWell(
+        borderRadius: BorderRadius.circular(12),
+        onTap: onBuy,
+        child: Stack(
+          children: [
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
             child: Row(
@@ -429,9 +432,8 @@ class _PlanCard extends StatelessWidget {
                     FilledButton.tonal(
                       onPressed: onBuy,
                       style: FilledButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
-                        minimumSize: Size.zero,
-                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                        minimumSize: const Size(64, 36),
                         backgroundColor: hasDiscount ? Colors.red.shade400 : null,
                         foregroundColor: hasDiscount ? Colors.white : null,
                       ),
@@ -466,6 +468,7 @@ class _PlanCard extends StatelessWidget {
               ),
             ),
         ],
+      ),
       ),
     );
   }
