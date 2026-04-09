@@ -28,8 +28,19 @@ class LoginPage extends HookConsumerWidget {
         errorMsg.value = s['fillFields'];
         return;
       }
+      // Email format validation
+      if (!RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$').hasMatch(email)) {
+        errorMsg.value = s['invalidEmail'] ?? '邮箱格式不正确';
+        return;
+      }
       if (password.length < 6) {
         errorMsg.value = s['passMin6'];
+        return;
+      }
+      // Invite code format validation (if provided)
+      final inviteCode = inviteCodeController.text.trim();
+      if (!isLogin.value && inviteCode.isNotEmpty && !RegExp(r'^[a-zA-Z0-9]{4,20}$').hasMatch(inviteCode)) {
+        errorMsg.value = s['invalidInviteCode'] ?? '邀请码格式不正确';
         return;
       }
 
