@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
+import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:gap/gap.dart';
 import 'package:hiddify/core/localization/translations.dart';
@@ -22,8 +23,8 @@ import 'package:hiddify/gen/assets.gen.dart';
 import 'package:hiddify/singbox/model/singbox_config_enum.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:hiddify/features/auth/data/auth_i18n.dart';
 
-// TODO: rewrite
 class ConnectionButton extends HookConsumerWidget {
   const ConnectionButton({super.key});
 
@@ -33,85 +34,15 @@ class ConnectionButton extends HookConsumerWidget {
     final connectionStatus = ref.watch(connectionNotifierProvider);
     final activeProxy = ref.watch(activeProxyNotifierProvider);
     final delay = activeProxy.valueOrNull?.urlTestDelay ?? 0;
-
     final requiresReconnect = ref.watch(configOptionNotifierProvider).valueOrNull;
     final today = DateTime.now();
-    // final animationController = useAnimationController(
-    //   duration: const Duration(seconds: 1),
-    // )..repeat(reverse: true); // Ensure the animation loops indefinitely
 
-    //   // Listen to the animation's value
-    //   final animationValue = useAnimation(Tween<double>(begin: 0.8, end: 1).animate(animationController));
-
-    //   // useEffect(() {
-    //   //   if (true) {
-    //   // Start repeating animation
-    //   //   } else {
-    //   //     animationController.stop(); // Stop animation if connected, disconnected, or error
-    //   //   }
-
-    //   //   // Cleanup when widget is disposed
-    //   //   return animationController.dispose;
-    //   // }, [connectionStatus.value]);
-
-    //   // ref.listen(
-    //   //   connectionNotifierProvider,
-    //   //   (_, next) {
-    //   //     if (next case AsyncError(:final error)) {
-    //   //       CustomAlertDialog.fromErr(t.presentError(error)).show(context);
-    //   //     }
-    //   //     if (next case AsyncData(value: Disconnected(:final connectionFailure?))) {
-    //   //       CustomAlertDialog.fromErr(t.presentError(connectionFailure)).show(context);
-    //   //     }
-    //   //   },
-    //   // );
+    // Debounce: prevent rapid double-taps
+    final isBusy = useRef(false);
 
     const buttonTheme = ConnectionButtonTheme.light;
+    final s = AuthI18n.t;
 
-    //   // return CircleDesignWidget(
-    //   //   onTap: switch (connectionStatus) {
-    //   //     // AsyncData(value: Disconnected()) || AsyncError() => () async {
-    //   //     //     if (await showExperimentalNotice()) {
-    //   //     //       return await ref.read(connectionNotifierProvider.notifier).toggleConnection();
-    //   //     //     }
-    //   //     //   },
-    //   //     // AsyncData(value: Connected()) => () async {
-    //   //     //     if (requiresReconnect == true && await showExperimentalNotice()) {
-    //   //     //       return await ref.read(connectionNotifierProvider.notifier).reconnect(await ref.read(activeProfileProvider.future));
-    //   //     //     }
-    //   //     //     return await ref.read(connectionNotifierProvider.notifier).toggleConnection();
-    //   //     //   },
-    //   //     _ => () {},
-    //   //   },
-    //   //   // enabled: switch (connectionStatus) {
-    //   //   //   AsyncData(value: Connected()) || AsyncData(value: Disconnected()) || AsyncError() => true,
-    //   //   //   _ => false,
-    //   //   // },
-    //   //   // label: switch (connectionStatus) {
-    //   //   //   AsyncData(value: Connected()) when requiresReconnect == true => t.connection.reconnect,
-    //   //   //   AsyncData(value: Connected()) when delay <= 0 || delay >= 65000 => t.connection.connecting,
-    //   //   //   AsyncData(value: final status) => status.present(t),
-    //   //   //   _ => "",
-    //   //   // },
-    //   //   color: switch (connectionStatus) {
-    //   //     AsyncData(value: Connected()) when requiresReconnect == true => Colors.teal,
-    //   //     AsyncData(value: Connected()) when delay <= 0 || delay >= 65000 => Color.fromARGB(255, 157, 139, 1),
-    //   //     AsyncData(value: Connected()) => Colors.green.shade900,
-    //   //     AsyncData(value: _) => Colors.indigo.shade700, // Color(0xFF3446A5), //buttonTheme.idleColor!,
-    //   //     _ => Colors.red,
-    //   //   },
-
-    //   //   animated: true ||
-    //   //       switch (connectionStatus) {
-    //   //         AsyncData(value: Connected()) when requiresReconnect == true => false,
-    //   //         AsyncData(value: Connected()) when delay <= 0 || delay >= 65000 => false,
-    //   //         AsyncData(value: Connected()) => true,
-    //   //         AsyncData(value: _) => true,
-    //   //         _ => false,
-    //   //       },
-    //   //   animationValue: animationValue,
-    //   // );
-    // }
     var secureLabel =
         (ref.watch(ConfigOptions.enableWarp) && ref.watch(ConfigOptions.warpDetourMode) == WarpDetourMode.warpOverProxy)
         ? t.connection.secure
@@ -119,13 +50,26 @@ class ConnectionButton extends HookConsumerWidget {
     if (delay <= 0 || delay > 65000 || connectionStatus.value != const Connected()) {
       secureLabel = "";
     }
+
+    // Debounce wrapper — prevents rapid double-taps
+    Future<void> Function() debounced(Future<void> Function() fn) {
+      return () async {
+        if (isBusy.value) return;
+        isBusy.value = true;
+        try { await fn(); } finally {
+          await Future.delayed(const Duration(milliseconds: 800));
+          isBusy.value = false;
+        }
+      };
+    }
+
     return _ConnectionButton(
       onTap: switch (connectionStatus) {
-        AsyncData(value: Connected()) when requiresReconnect == true => () async {
+        AsyncData(value: Connected()) when requiresReconnect == true => debounced(() async {
           final activeProfile = await ref.read(activeProfileProvider.future);
-          return await ref.read(connectionNotifierProvider.notifier).reconnect(activeProfile);
-        },
-        AsyncData(value: Disconnected()) || AsyncError() => () async {
+          await ref.read(connectionNotifierProvider.notifier).reconnect(activeProfile);
+        }),
+        AsyncData(value: Disconnected()) || AsyncError() => debounced(() async {
           // Pre-check: block if trial expired (fire-and-forget style to avoid flicker)
           final prefs = await SharedPreferences.getInstance();
           final auth = AuthService(prefs);
@@ -155,16 +99,16 @@ class ConnectionButton extends HookConsumerWidget {
           if (await ref.read(dialogNotifierProvider.notifier).showExperimentalFeatureNotice()) {
             await ref.read(connectionNotifierProvider.notifier).toggleConnection();
           }
-        },
-        AsyncData(value: Connected()) => () async {
+        }),
+        AsyncData(value: Connected()) => debounced(() async {
           if (requiresReconnect == true &&
               await ref.read(dialogNotifierProvider.notifier).showExperimentalFeatureNotice()) {
-            return await ref
-                .read(connectionNotifierProvider.notifier)
+            await ref.read(connectionNotifierProvider.notifier)
                 .reconnect(await ref.read(activeProfileProvider.future));
+            return;
           }
-          return await ref.read(connectionNotifierProvider.notifier).toggleConnection();
-        },
+          await ref.read(connectionNotifierProvider.notifier).toggleConnection();
+        }),
         _ => () {},
       },
       enabled: switch (connectionStatus) {
@@ -337,10 +281,10 @@ class _ConnectionButton extends StatelessWidget {
               // Status text — clear like LetsVPN
               Text(
                 _isConnected
-                    ? 'VPN 已连接'
+                    ? AuthI18n.t['vpnConnected']!
                     : _isConnecting
-                        ? '正在连接...'
-                        : 'VPN 已断开连接',
+                        ? AuthI18n.t['vpnConnecting']!
+                        : AuthI18n.t['vpnDisconnected']!,
                 style: Theme.of(context).textTheme.titleMedium?.copyWith(
                   fontWeight: FontWeight.w600,
                 ),
@@ -349,7 +293,7 @@ class _ConnectionButton extends StatelessWidget {
                 Padding(
                   padding: const EdgeInsets.only(top: 2),
                   child: Text(
-                    '网络已加密',
+                    AuthI18n.t['networkEncrypted']!,
                     style: Theme.of(context).textTheme.bodySmall?.copyWith(
                       color: Colors.green.shade600,
                       fontSize: 12,
@@ -391,7 +335,7 @@ class _ConnectionButton extends StatelessWidget {
                     elevation: _isConnected ? 0 : 2,
                   ),
                   child: Text(
-                    _isConnected ? '断开连接' : (_isConnecting ? '连接中...' : '点击连接'),
+                    _isConnected ? AuthI18n.t['disconnect']! : (_isConnecting ? AuthI18n.t['connecting']! : AuthI18n.t['tapConnect']!),
                     style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
                   ),
                 ),
