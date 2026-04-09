@@ -332,8 +332,16 @@ class AuthService {
       if (resp.statusCode == 200) {
         return jsonDecode(_body(resp));
       }
-    } catch (_) {}
-    return null;
+      // Return error detail from server
+      try {
+        final err = jsonDecode(_body(resp));
+        return {'error': true, 'detail': err['detail'] ?? 'HTTP ${resp.statusCode}'};
+      } catch (_) {
+        return {'error': true, 'detail': 'HTTP ${resp.statusCode}'};
+      }
+    } catch (e) {
+      return {'error': true, 'detail': e.toString()};
+    }
   }
 
   /// Create CNY order (alipay/wechat) via JLB gateway.
@@ -347,8 +355,16 @@ class AuthService {
       if (resp.statusCode == 200) {
         return jsonDecode(_body(resp));
       }
-    } catch (_) {}
-    return null;
+      // Return error detail from server
+      try {
+        final err = jsonDecode(_body(resp));
+        return {'error': true, 'detail': err['detail'] ?? 'HTTP ${resp.statusCode}'};
+      } catch (_) {
+        return {'error': true, 'detail': 'HTTP ${resp.statusCode}'};
+      }
+    } catch (e) {
+      return {'error': true, 'detail': e.toString()};
+    }
   }
 
   Future<Map<String, dynamic>?> getPayInfo(String orderNo) async {
