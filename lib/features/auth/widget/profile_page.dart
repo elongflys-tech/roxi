@@ -95,10 +95,10 @@ class ProfilePage extends HookWidget {
           ],
         ]),
         const SizedBox(height: 12),
-        SizedBox(width: double.infinity, child: ElevatedButton.icon(
+        SizedBox(width: double.infinity, child: FilledButton.icon(
           onPressed: () => showPlansSheet(context),
           icon: const Icon(Icons.rocket_launch_rounded, size: 18), label: Text(s['upgradePlan']!),
-          style: ElevatedButton.styleFrom(backgroundColor: Colors.blue, foregroundColor: Colors.white,
+          style: FilledButton.styleFrom(
             padding: const EdgeInsets.symmetric(vertical: 14),
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))))),
         const SizedBox(height: 16),
@@ -124,7 +124,26 @@ class ProfilePage extends HookWidget {
         if (hasEmail) ...[
           const SizedBox(height: 8),
           TextButton.icon(
-            onPressed: () async { final p = await SharedPreferences.getInstance(); await AuthService(p).logout(); reload(); },
+            onPressed: () async {
+              final s = AuthI18n.t;
+              final confirmed = await showDialog<bool>(
+                context: context,
+                builder: (ctx) => AlertDialog(
+                  title: Text(s['logout']!),
+                  content: Text(s['logoutConfirm'] ?? '确定要退出登录吗？'),
+                  actions: [
+                    TextButton(onPressed: () => Navigator.of(ctx).pop(false), child: Text(s['cancel'] ?? '取消')),
+                    TextButton(onPressed: () => Navigator.of(ctx).pop(true),
+                      child: Text(s['logout']!, style: const TextStyle(color: Colors.red))),
+                  ],
+                ),
+              );
+              if (confirmed == true) {
+                final p = await SharedPreferences.getInstance();
+                await AuthService(p).logout();
+                reload();
+              }
+            },
             icon: const Icon(Icons.logout_rounded, size: 18, color: Colors.red),
             label: Text(s['logout']!, style: const TextStyle(color: Colors.red))),
         ],
@@ -212,6 +231,7 @@ class _AuthPanel extends HookWidget {
       final em = emailCtrl.text.trim();
       final pw = passCtrl.text;
       if (em.isEmpty || pw.isEmpty) { errorMsg.value = s['fillFields']; return; }
+      if (!RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$').hasMatch(em)) { errorMsg.value = s['invalidEmail'] ?? '邮箱格式不正确'; return; }
       if (pw.length < 6) { errorMsg.value = s['passMin6']; return; }
       isLoading.value = true; errorMsg.value = null;
       final prefs = await SharedPreferences.getInstance();
@@ -255,9 +275,9 @@ class _AuthPanel extends HookWidget {
               border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)), isDense: true))],
         if (errorMsg.value != null) ...[const SizedBox(height: 8), Text(errorMsg.value!, style: const TextStyle(color: Colors.red, fontSize: 12))],
         const SizedBox(height: 16),
-        SizedBox(width: double.infinity, height: 44, child: ElevatedButton(
+        SizedBox(width: double.infinity, height: 44, child: FilledButton(
           onPressed: isLoading.value ? null : submit,
-          style: ElevatedButton.styleFrom(backgroundColor: Colors.blue, foregroundColor: Colors.white,
+          style: FilledButton.styleFrom(
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10))),
           child: isLoading.value
             ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
@@ -287,6 +307,10 @@ class _ApplyInviteCard extends HookWidget {
     Future<void> apply() async {
       final code = ctrl.text.trim();
       if (code.isEmpty) return;
+      if (!RegExp(r'^[a-zA-Z0-9]{4,20}$').hasMatch(code)) {
+        errorMsg.value = s['invalidInviteCode'] ?? '邀请码格式不正确';
+        return;
+      }
       isLoading.value = true; errorMsg.value = null;
       final prefs = await SharedPreferences.getInstance();
       final result = await AuthService(prefs).applyInvite(code);
@@ -309,8 +333,8 @@ class _ApplyInviteCard extends HookWidget {
             decoration: InputDecoration(hintText: s['inviteCodeHint'], border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
               isDense: true, contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10)))),
           const SizedBox(width: 8),
-          ElevatedButton(onPressed: isLoading.value ? null : apply,
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.blue, foregroundColor: Colors.white,
+          FilledButton(onPressed: isLoading.value ? null : apply,
+            style: FilledButton.styleFrom(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10))),
             child: isLoading.value
@@ -366,9 +390,9 @@ class _ChangePasswordCard extends HookWidget {
             decoration: InputDecoration(labelText: s['confirmPassword'], border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)), isDense: true)),
           if (errorMsg.value != null) ...[const SizedBox(height: 8), Text(errorMsg.value!, style: const TextStyle(color: Colors.red, fontSize: 12))],
           const SizedBox(height: 12),
-          SizedBox(width: double.infinity, child: ElevatedButton(
+          SizedBox(width: double.infinity, child: FilledButton(
             onPressed: isLoading.value ? null : submit,
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.blue, foregroundColor: Colors.white,
+            style: FilledButton.styleFrom(
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10))),
             child: isLoading.value
               ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
