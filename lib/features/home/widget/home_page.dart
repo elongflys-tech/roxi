@@ -63,39 +63,59 @@ class HomePage extends HookConsumerWidget {
           final prefs = await SharedPreferences.getInstance();
           final auth = AuthService(prefs);
           if (!auth.isLoggedIn) return;
-          final status = await auth.getTrialStatus();
+
+          // Use cached tier immediately for instant UI (no flicker)
+          final ct = auth.cachedTier;
+          if (ct == 'vip' || ct == 'svip') {
+            userTier.value = ct;
+            isPaidUser.value = true;
+          }
+
+          // Fire all API calls in parallel
+          final results = await Future.wait([
+            auth.getTrialStatus(),
+            auth.getUserInfo(),
+            auth.checkAppUpdate(),
+          ], eagerError: false);
+
+          final status = results[0] as Map<String, dynamic>?;
+          final userInfoResult = results[1] as Map<String, dynamic>?;
+          final updateInfo = results[2] as Map<String, dynamic>?;
+
+          // Process trial status
           if (status != null) {
             trialStatus.value = status['status'] as String?;
             trialChecked.value = true;
             if (status['status'] == 'paid') {
               isPaidUser.value = true;
             }
-            // "free" 用户是永久免费，不弹任何对话框
-            // "expired" 只有付费到期用户才会收到，弹升级提示
             if (status['status'] == 'expired' && context.mounted) {
               Future.delayed(const Duration(milliseconds: 500), () {
                 if (context.mounted) showTrialExpiredDialog(context);
               });
             }
+          } else {
+            trialChecked.value = true;
           }
-          final userInfo = await auth.getUserInfo();
-          if (userInfo != null) {
-            final tier = userInfo['tier'] as String? ?? 'free';
+
+          // Process user info
+          if (userInfoResult != null) {
+            final tier = userInfoResult['tier'] as String? ?? 'free';
             userTier.value = tier;
             if (tier == 'vip' || tier == 'svip') {
               isPaidUser.value = true;
             }
-            final ed = userInfo['expire_date'];
+            final ed = userInfoResult['expire_date'];
             if (ed != null && ed.toString().isNotEmpty) {
               expireDate.value = ed.toString();
             }
           }
-          // Prefetch plans so the sheet opens instantly
+
+          // Prefetch plans so the sheet opens instantly (fire-and-forget)
           auth.getPlans(); auth.getShowcaseNodes();
-          // Refresh token proactively (token expires in 24h)
           auth.refreshToken();
-          // Check for app update
-          final updateInfo = await auth.checkAppUpdate();
+
+          // Process update check
           if (updateInfo != null) {
             final serverCode = updateInfo['latest_version_code'] as int? ?? 0;
             if (serverCode > Constants.appVersionCode && context.mounted) {
@@ -112,7 +132,9 @@ class HomePage extends HookConsumerWidget {
               });
             }
           }
-        } catch (_) {}
+        } catch (_) {
+          trialChecked.value = true;
+        }
       }();
       return null;
     }, []);
@@ -269,7 +291,7 @@ class HomePage extends HookConsumerWidget {
           children: [
             Center(
               child: ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: 600),
+                constraints: BoxConstraints(maxWidth: MediaQuery.of(context).size.shortestSide > 600 ? 800 : 600),
                 child: CustomScrollView(
                   slivers: [
                     MultiSliver(
