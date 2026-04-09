@@ -160,9 +160,10 @@ class _PlansSheet extends HookWidget {
       if (!context.mounted) return;
       Navigator.of(context).pop(); // dismiss loading
 
-      if (order == null) {
+      if (order == null || order['error'] == true) {
+        final detail = order?['detail'] ?? s['orderFailed']!;
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(s['orderFailed']!)),
+          SnackBar(content: Text('$detail')),
         );
         return;
       }
@@ -211,9 +212,10 @@ class _PlansSheet extends HookWidget {
       if (!context.mounted) return;
       Navigator.of(context).pop(); // dismiss loading
 
-      if (result == null) {
+      if (result == null || result['error'] == true) {
+        final detail = result?['detail'] ?? s['orderFailed']!;
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(s['orderFailed']!)),
+          SnackBar(content: Text('$detail')),
         );
         return;
       }
