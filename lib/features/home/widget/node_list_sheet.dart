@@ -112,7 +112,9 @@ class NodeListPage extends HookConsumerWidget {
       ),
       body: SafeArea(
         top: false,
-        child: !isConnected
+        child: !expiryChecked.value
+          ? const Center(child: CircularProgressIndicator())
+          : !isConnected
           ? _ShowcaseNodeList(
               onConnect: () async {
                 if (isExpired.value) {
@@ -185,12 +187,25 @@ class _ShowcaseNodeList extends HookWidget {
     final nodes = useState<List<Map<String, dynamic>>>([]);
     final isLoading = useState(true);
 
+    final apiFailed = useState(false);
+
     useEffect(() {
       () async {
         final prefs = await SharedPreferences.getInstance();
         final auth = AuthService(prefs);
         final fetched = await auth.getShowcaseNodes();
-        nodes.value = fetched.isNotEmpty ? fetched : List<Map<String, dynamic>>.from(_fallbackNodes);
+        if (fetched.isNotEmpty) {
+          nodes.value = fetched;
+        } else {
+          // API unreachable — use fallback but respect user tier
+          apiFailed.value = true;
+          final isPaid = userTier == 'vip' || userTier == 'svip';
+          nodes.value = _fallbackNodes.map((n) {
+            final m = Map<String, dynamic>.from(n);
+            if (isPaid) m['locked'] = false;
+            return m;
+          }).toList();
+        }
         isLoading.value = false;
       }();
       return null;
@@ -224,7 +239,7 @@ class _ShowcaseNodeList extends HookWidget {
         children: [
           _RadioNodeTile(
             leading: Icon(Icons.public_rounded, size: 28, color: theme.colorScheme.primary),
-            title: '自动匹配最快网络',
+            title: s['autoMatchFastest'] ?? '自动匹配最快网络',
             subtitle: null,
             isSelected: true,
             onTap: onConnect,
@@ -244,15 +259,49 @@ class _ShowcaseNodeList extends HookWidget {
     }
 
     // Not expired: show free / paid separately
+    final isPaidUser = userTier == 'vip' || userTier == 'svip';
     final freeNodes = nodes.value.where((n) => n['tier'] == 'free').toList();
     final paidNodes = nodes.value.where((n) => n['tier'] == 'paid').toList();
 
     return ListView(
       padding: const EdgeInsets.symmetric(vertical: 8),
       children: [
+        // Network warning when API was unreachable
+        if (apiFailed.value)
+          Container(
+            margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            decoration: BoxDecoration(
+              color: Colors.orange.shade50,
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: Colors.orange.shade200),
+            ),
+            child: Row(
+              children: [
+                Icon(Icons.wifi_off_rounded, size: 16, color: Colors.orange.shade700),
+                const SizedBox(width: 8),
+                Expanded(child: Text(
+                  s['networkErrorDesc'] ?? '无法连接服务器，显示缓存节点',
+                  style: TextStyle(fontSize: 12, color: Colors.orange.shade800),
+                )),
+                GestureDetector(
+                  onTap: () async {
+                    final prefs = await SharedPreferences.getInstance();
+                    final auth = AuthService(prefs);
+                    final fetched = await auth.getShowcaseNodes(forceRefresh: true);
+                    if (fetched.isNotEmpty) {
+                      nodes.value = fetched;
+                      apiFailed.value = false;
+                    }
+                  },
+                  child: Icon(Icons.refresh_rounded, size: 16, color: Colors.orange.shade700),
+                ),
+              ],
+            ),
+          ),
         _RadioNodeTile(
           leading: Icon(Icons.public_rounded, size: 28, color: theme.colorScheme.primary),
-          title: '自动匹配最快网络',
+          title: s['autoMatchFastest'] ?? '自动匹配最快网络',
           subtitle: null,
           isSelected: true,
           onTap: onConnect,
@@ -269,14 +318,14 @@ class _ShowcaseNodeList extends HookWidget {
           )),
         ],
         if (paidNodes.isNotEmpty) ...[
-          _SectionHeader(label: s['paidRegion']!, count: paidNodes.length, color: Colors.orange, locked: true, onRefresh: () async { final prefs = await SharedPreferences.getInstance(); final auth = AuthService(prefs); final fetched = await auth.getShowcaseNodes(forceRefresh: true); if (fetched.isNotEmpty) nodes.value = fetched; }),
+          _SectionHeader(label: isPaidUser ? s['paidRegion']! : s['paidRegion']!, count: paidNodes.length, color: isPaidUser ? Colors.green : Colors.orange, locked: !isPaidUser, onRefresh: () async { final prefs = await SharedPreferences.getInstance(); final auth = AuthService(prefs); final fetched = await auth.getShowcaseNodes(forceRefresh: true); if (fetched.isNotEmpty) nodes.value = fetched; }),
           ...paidNodes.map((n) => _RadioNodeTile(
             leading: IPCountryFlag(countryCode: n['cc'] as String? ?? '', organization: '', size: 28),
             title: '${n['name']}|${n['tag']}',
-            subtitle: s['paidRegion'],
+            subtitle: isPaidUser ? null : s['paidRegion'],
             isSelected: false,
-            locked: true,
-            onTap: () => showPlansSheet(context),
+            locked: !isPaidUser,
+            onTap: isPaidUser ? onConnect : () => showPlansSheet(context),
           )),
         ],
       ],
@@ -316,7 +365,7 @@ class _ConnectedNodeList extends HookConsumerWidget {
         if (group == null || group.items.isEmpty) {
           // Even with no real proxies, show showcase nodes
           if (showcaseNodes.value.isEmpty) {
-            return const Center(child: Text('暂无节点'));
+            return Center(child: Text(s['noNodes'] ?? '暂无节点'));
           }
         }
         final realNodes = (group?.items ?? []).where((n) => !n.isGroup && n.tag.isNotEmpty).toList();
@@ -486,7 +535,7 @@ class _ConnectedNodeList extends HookConsumerWidget {
           ],
         );
       },
-      error: (_, __) => const Center(child: Text('加载失败')),
+      error: (_, __) => Center(child: Text(s['networkError'] ?? '加载失败')),
       loading: () => const Center(child: CircularProgressIndicator()),
     );
   }
