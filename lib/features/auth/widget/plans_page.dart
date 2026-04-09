@@ -839,7 +839,7 @@ class _CNYPaymentDialog extends HookWidget {
                 ),
               ),
             const SizedBox(height: 8),
-            Text('${AuthI18n.t['scanToPay'] ?? '请扫码支付'}',${channelLabel}扫码支付', style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
+            Text(AuthI18n.t['scanToPay'] ?? '${channelLabel}扫码支付', style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
             const SizedBox(height: 12),
             // Copy link button
             OutlinedButton.icon(
@@ -850,7 +850,7 @@ class _CNYPaymentDialog extends HookWidget {
                 );
               },
               icon: const Icon(Icons.copy_rounded, size: 16),
-              label: const Text('复制支付链接'),
+              label: Text(AuthI18n.t['copyPayLink'] ?? '复制支付链接'),
               style: OutlinedButton.styleFrom(
                 padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
               ),
