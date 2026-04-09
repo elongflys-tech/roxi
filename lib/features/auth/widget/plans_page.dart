@@ -149,24 +149,16 @@ class _PlansSheet extends HookWidget {
     final auth = AuthService(prefs);
 
     if (!context.mounted) return;
-    var loadingShown = true;
-    final loadingContext = context;
     showDialog(
       context: context,
-      barrierDismissible: true,
+      barrierDismissible: false,
       builder: (_) => const Center(child: CircularProgressIndicator()),
     );
-    Future.delayed(const Duration(seconds: 10), () {
-      if (loadingShown && loadingContext.mounted) {
-        try { Navigator.of(loadingContext).pop(); } catch (_) {}
-        loadingShown = false;
-      }
-    });
 
     try {
       final order = await auth.createOrder(plan['id']).timeout(const Duration(seconds: 15));
       if (!context.mounted) return;
-      if (loadingShown) { Navigator.of(context).pop(); loadingShown = false; }
+      Navigator.of(context).pop(); // dismiss loading
 
       if (order == null) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -192,11 +184,8 @@ class _PlansSheet extends HookWidget {
         Navigator.of(context).pop();
       }
     } catch (_) {
-      if (context.mounted && loadingShown) {
-        Navigator.of(context).pop();
-        loadingShown = false;
-      }
       if (context.mounted) {
+        Navigator.of(context).pop(); // dismiss loading
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text(s['orderFailed']!)),
         );
@@ -211,26 +200,16 @@ class _PlansSheet extends HookWidget {
 
     if (!context.mounted) return;
 
-    // Show brief loading, auto-dismiss after 10s max
-    var loadingShown = true;
-    final loadingContext = context;
     showDialog(
       context: context,
-      barrierDismissible: true,
+      barrierDismissible: false,
       builder: (_) => const Center(child: CircularProgressIndicator()),
     );
-    // Safety: auto-close loading after 10s
-    Future.delayed(const Duration(seconds: 10), () {
-      if (loadingShown && loadingContext.mounted) {
-        try { Navigator.of(loadingContext).pop(); } catch (_) {}
-        loadingShown = false;
-      }
-    });
 
     try {
       final result = await auth.createCNYOrder(plan['id'], channel).timeout(const Duration(seconds: 15));
       if (!context.mounted) return;
-      if (loadingShown) { Navigator.of(context).pop(); loadingShown = false; }
+      Navigator.of(context).pop(); // dismiss loading
 
       if (result == null) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -244,7 +223,7 @@ class _PlansSheet extends HookWidget {
 
       if (payUrl.isEmpty) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('获取支付链接失败')),
+          SnackBar(content: Text(s['payLinkFailed'] ?? '获取支付链接失败')),
         );
         return;
       }
@@ -266,10 +245,8 @@ class _PlansSheet extends HookWidget {
         Navigator.of(context).pop();
       }
     } catch (_) {
-      if (context.mounted && loadingShown) {
-        Navigator.of(context).pop();
-      }
       if (context.mounted) {
+        Navigator.of(context).pop(); // dismiss loading
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text(s['orderFailed']!)),
         );
@@ -664,20 +641,20 @@ class _PayMethodPicker extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 16),
-            Text('选择支付方式', style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold)),
+            Text(AuthI18n.t['selectPayMethod'] ?? '选择支付方式', style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold)),
             const SizedBox(height: 16),
             _PayMethodTile(
               icon: Icons.payment_rounded,
               color: const Color(0xFF1677FF),
-              label: '支付宝',
-              subtitle: '推荐',
+              label: AuthI18n.t['alipay'] ?? '支付宝',
+              subtitle: AuthI18n.t['recommended'] ?? '推荐',
               onTap: () => Navigator.of(context).pop('alipay'),
             ),
             const SizedBox(height: 8),
             _PayMethodTile(
               icon: Icons.chat_rounded,
               color: const Color(0xFF07C160),
-              label: '微信支付',
+              label: AuthI18n.t['wechatPay'] ?? '微信支付',
               subtitle: '',
               onTap: () => Navigator.of(context).pop('wechat'),
             ),
@@ -686,7 +663,7 @@ class _PayMethodPicker extends StatelessWidget {
               icon: Icons.currency_bitcoin_rounded,
               color: const Color(0xFF26A17B),
               label: 'USDT (TRC-20)',
-              subtitle: '加密货币',
+              subtitle: AuthI18n.t['cryptoPay'] ?? '加密货币',
               onTap: () => Navigator.of(context).pop('usdt'),
             ),
           ],
@@ -862,14 +839,14 @@ class _CNYPaymentDialog extends HookWidget {
                 ),
               ),
             const SizedBox(height: 8),
-            Text('请用${channelLabel}扫码支付', style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
+            Text('${AuthI18n.t['scanToPay'] ?? '请扫码支付'}',${channelLabel}扫码支付', style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
             const SizedBox(height: 12),
             // Copy link button
             OutlinedButton.icon(
               onPressed: () {
                 Clipboard.setData(ClipboardData(text: payUrl));
                 ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('支付链接已复制')),
+                  SnackBar(content: Text(AuthI18n.t['payLinkCopied'] ?? '支付链接已复制')),
                 );
               },
               icon: const Icon(Icons.copy_rounded, size: 16),
@@ -910,7 +887,7 @@ class _CNYPaymentDialog extends HookWidget {
                 ),
               ),
             const SizedBox(height: 6),
-            Text('支付完成后自动确认', style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant, fontSize: 11)),
+            Text(AuthI18n.t['payAutoConfirm'] ?? '支付完成后自动确认', style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant, fontSize: 11)),
           ],
         ),
       ),
