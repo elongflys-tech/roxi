@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:hiddify/features/auth/data/auth_i18n.dart';
 import 'package:hiddify/features/auth/data/auth_service.dart';
@@ -39,6 +40,13 @@ bool _isFreeNode(String tagDisplay) {
          tagDisplay.contains('共享') || tagDisplay.contains('体验');
 }
 
+Color _delayColor(int delay) {
+  if (delay <= 0 || delay > 65000) return Colors.grey;
+  if (delay < 800) return Colors.green;
+  if (delay < 1500) return Colors.orange;
+  return Colors.red;
+}
+
 /// Full-screen node list page.
 class NodeListPage extends HookConsumerWidget {
   const NodeListPage({super.key});
@@ -55,8 +63,6 @@ class NodeListPage extends HookConsumerWidget {
     final activeProxy = ref.watch(activeProxyNotifierProvider).valueOrNull;
     final activeProfile = ref.watch(activeProfileProvider).valueOrNull;
 
-    final canPop = Navigator.of(context).canPop();
-
     // Check if user is expired (no active subscription)
     final isExpired = useState(false);
     final userTier = useState<String>('free');
@@ -69,7 +75,6 @@ class NodeListPage extends HookConsumerWidget {
           final prefs = await SharedPreferences.getInstance();
           final auth = AuthService(prefs);
           if (!auth.isLoggedIn) { expiryChecked.value = true; return; }
-          // Fetch user info first for tier
           final userInfo = await auth.getUserInfo();
           if (userInfo != null) {
             final tier = userInfo['tier'] as String? ?? 'free';
@@ -82,14 +87,8 @@ class NodeListPage extends HookConsumerWidget {
           }
           final status = await auth.getTrialStatus();
           if (status != null) {
-            // paid 或 free 都不算过期，只有 expired 才锁节点
-            if (status['status'] == 'expired') {
-              isExpired.value = true;
-            }
-            if (status['status'] == 'paid') {
-              // Also update tier from trial-status if getUserInfo missed it
-              if (userTier.value == 'free') userTier.value = 'vip';
-            }
+            if (status['status'] == 'expired') isExpired.value = true;
+            if (status['status'] == 'paid' && userTier.value == 'free') userTier.value = 'vip';
             expiryChecked.value = true;
             return;
           }
@@ -114,34 +113,19 @@ class NodeListPage extends HookConsumerWidget {
         top: false,
         child: !expiryChecked.value
           ? const Center(child: CircularProgressIndicator())
-          : !isConnected
-          ? _ShowcaseNodeList(
-              onConnect: () async {
-                if (isExpired.value) {
-                  showPlansSheet(context);
-                  return;
-                }
-                ref.read(connectionNotifierProvider.notifier).toggleConnection();
-                if (Navigator.of(context).canPop()) {
-                  Navigator.of(context).pop();
-                }
-              },
-              isExpired: isExpired.value,
-              expiryChecked: expiryChecked.value,
-              userTier: userTier.value,
-            )
           : _ConnectedNodeList(
               proxiesAsync: proxiesAsync,
               activeProxy: activeProxy,
               isExpired: isExpired.value,
               userTier: userTier.value,
+              isConnected: isConnected,
             ),
       ),
     );
   }
 }
 
-/// Fallback node list when API is unreachable (e.g. behind GFW without VPN).
+/// Fallback node list when API is unreachable.
 const _fallbackNodes = <Map<String, dynamic>>[
   {'name': '香港', 'cc': 'hk', 'tag': '共享', 'tier': 'paid', 'locked': true},
   {'name': '台湾', 'cc': 'tw', 'tag': '共享', 'tier': 'paid', 'locked': true},
@@ -171,185 +155,28 @@ const _fallbackNodes = <Map<String, dynamic>>[
   {'name': '澳门高速', 'cc': 'mo', 'tag': '专属', 'tier': 'paid', 'locked': true},
 ];
 
-/// Showcase node list — shown when VPN is disconnected.
-/// When expired: all nodes shown in one unified list with lock style.
-class _ShowcaseNodeList extends HookWidget {
-  final VoidCallback onConnect;
-  final bool isExpired;
-  final bool expiryChecked;
-  final String userTier;
-  const _ShowcaseNodeList({required this.onConnect, required this.isExpired, this.expiryChecked = true, this.userTier = 'free'});
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final s = AuthI18n.t;
-    final nodes = useState<List<Map<String, dynamic>>>([]);
-    final isLoading = useState(true);
-
-    final apiFailed = useState(false);
-
-    useEffect(() {
-      () async {
-        final prefs = await SharedPreferences.getInstance();
-        final auth = AuthService(prefs);
-        final fetched = await auth.getShowcaseNodes();
-        if (fetched.isNotEmpty) {
-          nodes.value = fetched;
-        } else {
-          // API unreachable — use fallback but respect user tier
-          apiFailed.value = true;
-          final isPaid = userTier == 'vip' || userTier == 'svip';
-          nodes.value = _fallbackNodes.map((n) {
-            final m = Map<String, dynamic>.from(n);
-            if (isPaid) m['locked'] = false;
-            return m;
-          }).toList();
-        }
-        isLoading.value = false;
-      }();
-      return null;
-    }, []);
-
-    if (isLoading.value || !expiryChecked) {
-      return const Center(child: CircularProgressIndicator());
-    }
-
-    if (nodes.value.isEmpty) {
-      return Center(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(s['connectFirst']!, style: theme.textTheme.bodyMedium),
-            const SizedBox(height: 16),
-            FilledButton.icon(
-              onPressed: onConnect,
-              icon: const Icon(Icons.flash_on_rounded, size: 18),
-              label: Text(s['oneClickConnect']!),
-            ),
-          ],
-        ),
-      );
-    }
-
-    if (isExpired) {
-      // Expired: merge all nodes into one unified list, all locked
-      return ListView(
-        padding: const EdgeInsets.symmetric(vertical: 8),
-        children: [
-          _RadioNodeTile(
-            leading: Icon(Icons.public_rounded, size: 28, color: theme.colorScheme.primary),
-            title: s['autoMatchFastest'] ?? '自动匹配最快网络',
-            subtitle: null,
-            isSelected: true,
-            onTap: onConnect,
-          ),
-          const Divider(height: 1, indent: 16, endIndent: 16),
-          _SectionHeader(label: s['paidRegion']!, count: nodes.value.length, color: Colors.orange, locked: true, onRefresh: () async { final prefs = await SharedPreferences.getInstance(); final auth = AuthService(prefs); final fetched = await auth.getShowcaseNodes(forceRefresh: true); if (fetched.isNotEmpty) nodes.value = fetched; }),
-          ...nodes.value.map((n) => _RadioNodeTile(
-            leading: IPCountryFlag(countryCode: n['cc'] as String? ?? '', organization: '', size: 28),
-            title: '${n['name']}|${n['tag']}',
-            subtitle: s['paidRegion'],
-            isSelected: false,
-            locked: true,
-            onTap: () => showPlansSheet(context),
-          )),
-        ],
-      );
-    }
-
-    // Not expired: show free / paid separately
-    final isPaidUser = userTier == 'vip' || userTier == 'svip';
-    final freeNodes = nodes.value.where((n) => n['tier'] == 'free').toList();
-    final paidNodes = nodes.value.where((n) => n['tier'] == 'paid').toList();
-
-    return ListView(
-      padding: const EdgeInsets.symmetric(vertical: 8),
-      children: [
-        // Network warning when API was unreachable
-        if (apiFailed.value)
-          Container(
-            margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-            decoration: BoxDecoration(
-              color: Colors.orange.shade50,
-              borderRadius: BorderRadius.circular(8),
-              border: Border.all(color: Colors.orange.shade200),
-            ),
-            child: Row(
-              children: [
-                Icon(Icons.wifi_off_rounded, size: 16, color: Colors.orange.shade700),
-                const SizedBox(width: 8),
-                Expanded(child: Text(
-                  s['networkErrorDesc'] ?? '无法连接服务器，显示缓存节点',
-                  style: TextStyle(fontSize: 12, color: Colors.orange.shade800),
-                )),
-                GestureDetector(
-                  onTap: () async {
-                    final prefs = await SharedPreferences.getInstance();
-                    final auth = AuthService(prefs);
-                    final fetched = await auth.getShowcaseNodes(forceRefresh: true);
-                    if (fetched.isNotEmpty) {
-                      nodes.value = fetched;
-                      apiFailed.value = false;
-                    }
-                  },
-                  child: Icon(Icons.refresh_rounded, size: 16, color: Colors.orange.shade700),
-                ),
-              ],
-            ),
-          ),
-        _RadioNodeTile(
-          leading: Icon(Icons.public_rounded, size: 28, color: theme.colorScheme.primary),
-          title: s['autoMatchFastest'] ?? '自动匹配最快网络',
-          subtitle: null,
-          isSelected: true,
-          onTap: onConnect,
-        ),
-        const Divider(height: 1, indent: 16, endIndent: 16),
-        if (freeNodes.isNotEmpty) ...[
-          _SectionHeader(label: s['freeRegion']!, count: freeNodes.length, color: Colors.green),
-          ...freeNodes.map((n) => _RadioNodeTile(
-            leading: IPCountryFlag(countryCode: n['cc'] as String? ?? '', organization: '', size: 28),
-            title: '${n['name']}|${n['tag']}',
-            subtitle: s['freeRegion'],
-            isSelected: false,
-            onTap: onConnect,
-          )),
-        ],
-        if (paidNodes.isNotEmpty) ...[
-          _SectionHeader(label: isPaidUser ? s['paidRegion']! : s['paidRegion']!, count: paidNodes.length, color: isPaidUser ? Colors.green : Colors.orange, locked: !isPaidUser, onRefresh: () async { final prefs = await SharedPreferences.getInstance(); final auth = AuthService(prefs); final fetched = await auth.getShowcaseNodes(forceRefresh: true); if (fetched.isNotEmpty) nodes.value = fetched; }),
-          ...paidNodes.map((n) => _RadioNodeTile(
-            leading: IPCountryFlag(countryCode: n['cc'] as String? ?? '', organization: '', size: 28),
-            title: '${n['name']}|${n['tag']}',
-            subtitle: isPaidUser ? null : s['paidRegion'],
-            isSelected: false,
-            locked: !isPaidUser,
-            onTap: isPaidUser ? onConnect : () => showPlansSheet(context),
-          )),
-        ],
-      ],
-    );
-  }
-}
-
-/// Connected node list — real proxy data grouped by country with radio selection.
-/// Merges showcase paid nodes (locked) so the full node catalog is always visible.
-/// When expired: all nodes shown with lock style, tapping opens plans.
+/// Connected node list — real proxy data, Shadowrocket-style.
+/// Swipe left/right for actions, double-tap to connect, selected dot on left.
 class _ConnectedNodeList extends HookConsumerWidget {
   final AsyncValue<OutboundGroup?> proxiesAsync;
   final OutboundInfo? activeProxy;
   final bool isExpired;
   final String userTier;
+  final bool isConnected;
 
-  const _ConnectedNodeList({required this.proxiesAsync, required this.activeProxy, required this.isExpired, this.userTier = 'free'});
+  const _ConnectedNodeList({
+    required this.proxiesAsync,
+    required this.activeProxy,
+    required this.isExpired,
+    this.userTier = 'free',
+    this.isConnected = true,
+  });
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
     final s = AuthI18n.t;
 
-    // Fetch showcase nodes to merge paid ones into the list
     final showcaseNodes = useState<List<Map<String, dynamic>>>([]);
     useEffect(() {
       () async {
@@ -362,128 +189,72 @@ class _ConnectedNodeList extends HookConsumerWidget {
 
     return proxiesAsync.when(
       data: (group) {
-        if (group == null || group.items.isEmpty) {
-          // Even with no real proxies, show showcase nodes
-          if (showcaseNodes.value.isEmpty) {
-            return Center(child: Text(s['noNodes'] ?? '暂无节点'));
-          }
-        }
         final realNodes = (group?.items ?? []).where((n) => !n.isGroup && n.tag.isNotEmpty).toList();
 
-        // Group real nodes by country
+        if (realNodes.isEmpty) {
+          return _ShowcaseFallback(
+            showcaseNodes: showcaseNodes.value,
+            isExpired: isExpired,
+            userTier: userTier,
+            isConnected: isConnected,
+            onConnect: () {
+              if (isExpired) { showPlansSheet(context); return; }
+              ref.read(connectionNotifierProvider.notifier).toggleConnection();
+              if (Navigator.of(context).canPop()) Navigator.of(context).pop();
+            },
+          );
+        }
+
+        // Group by country
         final grouped = <String, List<OutboundInfo>>{};
         for (final n in realNodes) {
-          final country = _extractCountry(n.tagDisplay);
-          grouped.putIfAbsent(country, () => []).add(n);
+          grouped.putIfAbsent(_extractCountry(n.tagDisplay), () => []).add(n);
         }
-
-        // Determine which countries have free (体验) real nodes
         final freeCountries = <String>{};
-        for (final entry in grouped.entries) {
-          if (entry.value.any((n) => _isFreeNode(n.tagDisplay))) {
-            freeCountries.add(entry.key);
-          }
+        for (final e in grouped.entries) {
+          if (e.value.any((n) => _isFreeNode(n.tagDisplay))) freeCountries.add(e.key);
         }
 
-        // Collect showcase paid nodes whose country is NOT already in real nodes
+        // Extra showcase nodes
         final realCountries = grouped.keys.toSet();
         final extraPaidNodes = <Map<String, dynamic>>[];
         for (final sn in showcaseNodes.value) {
           final tier = sn['tier'] as String? ?? '';
           if (tier == 'paid') {
-            // Always add paid showcase nodes — they show as locked
             extraPaidNodes.add(sn);
           } else if (tier == 'free') {
-            // Add free showcase nodes only if that country has no real nodes
             final name = sn['name'] as String? ?? '';
-            if (!realCountries.any((c) => name.contains(c))) {
-              extraPaidNodes.add(sn);
-            }
+            if (!realCountries.any((c) => name.contains(c))) extraPaidNodes.add(sn);
           }
         }
-
-        // Group extra paid nodes by a simple label
         final extraGrouped = <String, List<Map<String, dynamic>>>{};
         for (final n in extraPaidNodes) {
           final name = n['name'] as String? ?? '';
-          // Extract country from showcase name
           String country = '其他';
-          for (final c in ['香港', '台湾', '日本', '新加坡', '美国', '韩国', '英国', '德国', '法国', '澳大利亚', '加拿大', '荷兰', '印度', '巴西', '土耳其', '俄罗斯', '阿根廷', '爱尔兰', '阿联酋', '澳门']) {
+          for (final c in ['香港','台湾','日本','新加坡','美国','韩国','英国','德国','法国','澳大利亚','加拿大','荷兰','印度','巴西','土耳其','俄罗斯','阿根廷','爱尔兰','阿联酋','澳门']) {
             if (name.contains(c)) { country = c; break; }
           }
           extraGrouped.putIfAbsent(country, () => []).add(n);
         }
 
-        // Build sorted country list: free real nodes first, then paid real, then extra showcase
-        final sortedRealCountries = grouped.keys.toList()
+        final sortedCountries = grouped.keys.toList()
           ..sort((a, b) {
-            final aFree = freeCountries.contains(a);
-            final bFree = freeCountries.contains(b);
-            if (aFree && !bFree) return -1;
-            if (!aFree && bFree) return 1;
+            final af = freeCountries.contains(a), bf = freeCountries.contains(b);
+            if (af && !bf) return -1;
+            if (!af && bf) return 1;
             return a.compareTo(b);
           });
-
-        // Extra countries not already in real nodes
         final extraCountries = extraGrouped.keys.where((c) => !realCountries.contains(c)).toList()..sort();
-
         final activeTag = activeProxy?.tag ?? '';
-
-        // When expired: all nodes are locked
-        if (isExpired) {
-          return ListView(
-            padding: const EdgeInsets.symmetric(vertical: 8),
-            children: [
-              // Real nodes (all locked when expired)
-              ...sortedRealCountries.expand((country) {
-                final countryNodes = grouped[country]!;
-                return [
-                  _SectionHeader(label: country, count: countryNodes.length, color: Colors.orange, locked: true),
-                  ...countryNodes.map((node) {
-                    final delay = node.urlTestDelay;
-                    final hasDelay = delay > 0 && delay < 65000;
-                    final cc = NodeListCard.inferCountryCode(node.tagDisplay, node.ipinfo.countryCode);
-                    return _RadioNodeTile(
-                      leading: IPCountryFlag(countryCode: cc, organization: node.ipinfo.org, size: 28),
-                      title: NodeListCard.cleanTag(node.tagDisplay),
-                      subtitle: hasDelay ? '${delay}ms · ${node.type}' : node.type,
-                      subtitleColor: hasDelay ? _delayColor(delay) : null,
-                      isSelected: false,
-                      locked: true,
-                      onTap: () => showPlansSheet(context),
-                    );
-                  }),
-                ];
-              }),
-              // Extra showcase paid nodes (locked)
-              if (extraCountries.isNotEmpty) ...[
-                _SectionHeader(label: s['paidRegion']!, count: extraPaidNodes.length, color: Colors.orange, locked: true),
-                ...extraCountries.expand((country) {
-                  final nodes = extraGrouped[country]!;
-                  return nodes.map((n) => _RadioNodeTile(
-                    leading: IPCountryFlag(countryCode: n['cc'] as String? ?? '', organization: '', size: 28),
-                    title: '${n['name']}|${n['tag']}',
-                    subtitle: s['paidRegion'],
-                    isSelected: false,
-                    locked: true,
-                    onTap: () => showPlansSheet(context),
-                  ));
-                }),
-              ],
-            ],
-          );
-        }
-
-        // Not expired: paid users can use all real nodes, free users only free nodes
         final isPaidUser = userTier == 'vip' || userTier == 'svip';
+
         return ListView(
           padding: const EdgeInsets.symmetric(vertical: 8),
           children: [
-            // Real proxy nodes grouped by country
-            ...sortedRealCountries.expand((country) {
+            ...sortedCountries.expand((country) {
               final countryNodes = grouped[country]!;
               final isFree = freeCountries.contains(country);
-              final isUnlocked = isPaidUser || isFree;
+              final isUnlocked = !isExpired && (isPaidUser || isFree);
               return [
                 _SectionHeader(
                   label: country,
@@ -492,76 +263,392 @@ class _ConnectedNodeList extends HookConsumerWidget {
                   locked: !isUnlocked,
                 ),
                 ...countryNodes.map((node) {
-                  final isSelected = node.tag == activeTag;
+                  final selected = node.tag == activeTag;
                   final delay = node.urlTestDelay;
-                  final hasDelay = delay > 0 && delay < 65000;
                   final cc = NodeListCard.inferCountryCode(node.tagDisplay, node.ipinfo.countryCode);
-                  return _RadioNodeTile(
-                    leading: IPCountryFlag(countryCode: cc, organization: node.ipinfo.org, size: 28),
+                  return _SwipeNodeTile(
+                    key: ValueKey(node.tag),
+                    flagWidget: IPCountryFlag(countryCode: cc, organization: node.ipinfo.org, size: 28),
                     title: NodeListCard.cleanTag(node.tagDisplay),
-                    subtitle: hasDelay ? '${delay}ms · ${node.type}' : node.type,
-                    subtitleColor: hasDelay ? _delayColor(delay) : null,
-                    isSelected: isSelected,
+                    subtitle: '${node.type}',
+                    delay: delay,
+                    isSelected: selected,
                     locked: !isUnlocked,
-                    onTap: () async {
-                      if (!isUnlocked) {
-                        showPlansSheet(context);
-                        return;
-                      }
-                      if (!isSelected && group != null) {
+                    onDoubleTap: () async {
+                      if (!isUnlocked) { showPlansSheet(context); return; }
+                      if (!selected && group != null) {
                         await ref.read(proxiesOverviewNotifierProvider.notifier)
                             .changeProxy(group.tag, node.tag);
                       }
                     },
+                    onTest: () async {
+                      if (group != null) {
+                        await ref.read(proxiesOverviewNotifierProvider.notifier)
+                            .urlTest(group.tag);
+                      }
+                    },
+                    onCopy: () {
+                      Clipboard.setData(ClipboardData(text: node.tag));
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(content: Text('已复制: ${node.tag}'), duration: const Duration(seconds: 1)),
+                      );
+                    },
+                    onInfo: () => _showNodeInfo(context, node),
                   );
                 }),
               ];
             }),
-            // Extra showcase paid nodes (countries not in real proxies) — only show for free users
+            // Extra showcase paid nodes
             if (!isPaidUser && extraCountries.isNotEmpty) ...[
               _SectionHeader(label: s['paidRegion']!, count: extraPaidNodes.length, color: Colors.orange, locked: true),
               ...extraCountries.expand((country) {
-                final nodes = extraGrouped[country]!;
-                return nodes.map((n) => _RadioNodeTile(
-                  leading: IPCountryFlag(countryCode: n['cc'] as String? ?? '', organization: '', size: 28),
+                return (extraGrouped[country] ?? []).map((n) => _SwipeNodeTile(
+                  flagWidget: IPCountryFlag(countryCode: n['cc'] as String? ?? '', organization: '', size: 28),
                   title: '${n['name']}|${n['tag']}',
-                  subtitle: s['paidRegion'],
+                  subtitle: '',
+                  delay: 0,
                   isSelected: false,
                   locked: true,
-                  onTap: () => showPlansSheet(context),
+                  onDoubleTap: () => showPlansSheet(context),
+                  onTest: null,
+                  onCopy: null,
+                  onInfo: null,
                 ));
               }),
             ],
           ],
         );
       },
-      error: (_, __) => Center(child: Text(s['networkError'] ?? '加载失败')),
+      error: (_, __) => _ShowcaseFallback(
+        showcaseNodes: showcaseNodes.value,
+        isExpired: isExpired,
+        userTier: userTier,
+        isConnected: isConnected,
+        onConnect: () {
+          if (isExpired) { showPlansSheet(context); return; }
+          ref.read(connectionNotifierProvider.notifier).toggleConnection();
+          if (Navigator.of(context).canPop()) Navigator.of(context).pop();
+        },
+      ),
       loading: () => const Center(child: CircularProgressIndicator()),
     );
   }
+}
 
-  static Color _delayColor(int delay) {
-    if (delay <= 0 || delay > 65000) return Colors.grey;
-    if (delay < 800) return Colors.green;
-    if (delay < 1500) return Colors.orange;
-    return Colors.red;
+// ─────────────────────────────────────────────────────────────────────────────
+// Shadowrocket-style swipeable node tile
+// Left swipe → "测试" + "复制"  |  Double-tap → connect  |  Selected dot on left
+// ─────────────────────────────────────────────────────────────────────────────
+class _SwipeNodeTile extends StatefulWidget {
+  final Widget flagWidget;
+  final String title;
+  final String subtitle;
+  final int delay;
+  final bool isSelected;
+  final bool locked;
+  final VoidCallback onDoubleTap;
+  final VoidCallback? onTest;
+  final VoidCallback? onCopy;
+  final VoidCallback? onInfo;
+
+  const _SwipeNodeTile({
+    super.key,
+    required this.flagWidget,
+    required this.title,
+    required this.subtitle,
+    required this.delay,
+    required this.isSelected,
+    this.locked = false,
+    required this.onDoubleTap,
+    this.onTest,
+    this.onCopy,
+    this.onInfo,
+  });
+
+  @override
+  State<_SwipeNodeTile> createState() => _SwipeNodeTileState();
+}
+
+class _SwipeNodeTileState extends State<_SwipeNodeTile> with SingleTickerProviderStateMixin {
+  late final AnimationController _animCtrl;
+  late Animation<Offset> _slideAnim;
+  bool _showActions = false;
+  static const _actionWidth = 140.0; // total width of action buttons
+
+  @override
+  void initState() {
+    super.initState();
+    _animCtrl = AnimationController(vsync: this, duration: const Duration(milliseconds: 200));
+    _slideAnim = Tween<Offset>(begin: Offset.zero, end: const Offset(-140, 0))
+        .animate(CurvedAnimation(parent: _animCtrl, curve: Curves.easeOut));
+  }
+
+  @override
+  void dispose() {
+    _animCtrl.dispose();
+    super.dispose();
+  }
+
+  void _open() {
+    if (_showActions) return;
+    setState(() => _showActions = true);
+    _animCtrl.forward();
+  }
+
+  void _close() {
+    if (!_showActions) return;
+    _animCtrl.reverse().then((_) {
+      if (mounted) setState(() => _showActions = false);
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final delay = widget.delay;
+    final hasDelay = delay > 0 && delay < 65000;
+    final isTimeout = delay >= 65000;
+
+    return GestureDetector(
+      onHorizontalDragEnd: (details) {
+        if (widget.locked) return;
+        final v = details.primaryVelocity ?? 0;
+        if (v < -200) {
+          _open(); // swipe left → show actions
+        } else if (v > 200) {
+          _close(); // swipe right → hide actions
+        }
+      },
+      onDoubleTap: () {
+        _close();
+        widget.onDoubleTap();
+      },
+      onTap: () {
+        if (_showActions) _close();
+      },
+      child: SizedBox(
+        height: 60,
+        child: Stack(
+          children: [
+            // Action buttons behind (right side)
+            if (_showActions)
+              Positioned.fill(
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  children: [
+                    _ActionButton(
+                      label: '测试',
+                      color: Colors.green,
+                      onTap: () { _close(); widget.onTest?.call(); },
+                    ),
+                    _ActionButton(
+                      label: '复制',
+                      color: Colors.grey.shade400,
+                      onTap: () { _close(); widget.onCopy?.call(); },
+                    ),
+                  ],
+                ),
+              ),
+            // Foreground tile
+            AnimatedBuilder(
+              animation: _slideAnim,
+              builder: (_, child) => Transform.translate(
+                offset: _slideAnim.value,
+                child: child,
+              ),
+              child: Container(
+                height: 60,
+                color: widget.isSelected
+                    ? theme.colorScheme.primary.withOpacity(0.06)
+                    : theme.scaffoldBackgroundColor,
+                padding: const EdgeInsets.symmetric(horizontal: 12),
+                child: Row(
+                  children: [
+                    // Selected dot (Shadowrocket style)
+                    SizedBox(
+                      width: 14,
+                      child: widget.locked
+                          ? const SizedBox.shrink()
+                          : Container(
+                              width: 10,
+                              height: 10,
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
+                                color: widget.isSelected
+                                    ? Colors.green
+                                    : Colors.transparent,
+                                border: widget.isSelected
+                                    ? null
+                                    : Border.all(color: Colors.grey.shade300, width: 1),
+                              ),
+                            ),
+                    ),
+                    const SizedBox(width: 8),
+                    // Country flag
+                    SizedBox(width: 32, height: 28, child: Center(child: widget.flagWidget)),
+                    const SizedBox(width: 10),
+                    // Title + subtitle
+                    Expanded(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            widget.title,
+                            style: theme.textTheme.bodyMedium?.copyWith(
+                              fontWeight: widget.isSelected ? FontWeight.w600 : FontWeight.normal,
+                              color: widget.locked ? theme.colorScheme.onSurfaceVariant : null,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          if (widget.subtitle.isNotEmpty)
+                            Text(
+                              widget.subtitle,
+                              style: theme.textTheme.bodySmall?.copyWith(
+                                color: theme.colorScheme.onSurfaceVariant,
+                                fontSize: 11,
+                              ),
+                            ),
+                        ],
+                      ),
+                    ),
+                    // Delay label
+                    if (widget.locked)
+                      const Icon(Icons.lock_rounded, size: 16, color: Colors.orange)
+                    else ...[
+                      if (hasDelay)
+                        Text(
+                          '${delay}ms',
+                          style: TextStyle(
+                            color: _delayColor(delay),
+                            fontSize: 13,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        )
+                      else if (isTimeout)
+                        Text('超时', style: TextStyle(color: Colors.red.shade300, fontSize: 12))
+                      else
+                        Text('--', style: TextStyle(color: Colors.grey.shade400, fontSize: 12)),
+                      // Info button (ⓘ)
+                      if (widget.onInfo != null)
+                        GestureDetector(
+                          onTap: widget.onInfo,
+                          child: Padding(
+                            padding: const EdgeInsets.only(left: 6),
+                            child: Icon(
+                              Icons.info_outline_rounded,
+                              size: 20,
+                              color: theme.colorScheme.primary.withOpacity(0.7),
+                            ),
+                          ),
+                        ),
+                    ],
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 }
 
-/// Section header — "付费解锁 🔒 26"
+/// Swipe action button (测试 / 复制).
+class _ActionButton extends StatelessWidget {
+  final String label;
+  final Color color;
+  final VoidCallback onTap;
+
+  const _ActionButton({required this.label, required this.color, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        width: 70,
+        height: 60,
+        color: color,
+        alignment: Alignment.center,
+        child: Text(
+          label,
+          style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w600),
+        ),
+      ),
+    );
+  }
+}
+
+/// Show node detail info bottom sheet.
+void _showNodeInfo(BuildContext context, OutboundInfo node) {
+  final theme = Theme.of(context);
+  final delay = node.urlTestDelay;
+  final hasDelay = delay > 0 && delay < 65000;
+  showModalBottomSheet(
+    context: context,
+    shape: const RoundedRectangleBorder(
+      borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+    ),
+    builder: (_) => Padding(
+      padding: const EdgeInsets.all(20),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(NodeListCard.cleanTag(node.tagDisplay),
+              style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold)),
+          const SizedBox(height: 12),
+          _InfoRow('协议', node.type),
+          if (hasDelay) _InfoRow('延迟', '${delay}ms'),
+          if (node.ipinfo.countryCode.isNotEmpty) _InfoRow('国家', node.ipinfo.countryCode.toUpperCase()),
+          if (node.ipinfo.org.isNotEmpty) _InfoRow('组织', node.ipinfo.org),
+          _InfoRow('标签', node.tag),
+          const SizedBox(height: 8),
+        ],
+      ),
+    ),
+  );
+}
+
+class _InfoRow extends StatelessWidget {
+  final String label;
+  final String value;
+  const _InfoRow(this.label, this.value);
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        children: [
+          SizedBox(
+            width: 60,
+            child: Text(label, style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
+          ),
+          Expanded(
+            child: Text(value, style: theme.textTheme.bodyMedium, maxLines: 2, overflow: TextOverflow.ellipsis),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Section header.
 class _SectionHeader extends StatelessWidget {
   final String label;
   final int count;
   final Color color;
   final bool locked;
-  final VoidCallback? onRefresh;
 
   const _SectionHeader({
     required this.label,
     required this.count,
     required this.color,
     this.locked = false,
-    this.onRefresh,
   });
 
   @override
@@ -590,118 +677,126 @@ class _SectionHeader extends StatelessWidget {
               ],
             ),
           ),
-          const Spacer(),
-          if (onRefresh != null)
-            GestureDetector(
-              onTap: onRefresh,
-              child: Icon(Icons.refresh_rounded, size: 18, color: theme.colorScheme.onSurfaceVariant),
-            ),
         ],
       ),
     );
   }
 }
 
-/// Radio-style node tile.
-class _RadioNodeTile extends StatelessWidget {
-  final Widget leading;
-  final String title;
-  final String? subtitle;
-  final Color? subtitleColor;
-  final bool isSelected;
-  final bool locked;
-  final VoidCallback onTap;
+/// Fallback when no real proxy data (disconnected / error).
+class _ShowcaseFallback extends HookWidget {
+  final List<Map<String, dynamic>> showcaseNodes;
+  final bool isExpired;
+  final String userTier;
+  final bool isConnected;
+  final VoidCallback onConnect;
 
-  const _RadioNodeTile({
-    required this.leading,
-    required this.title,
-    this.subtitle,
-    this.subtitleColor,
-    required this.isSelected,
-    this.locked = false,
-    required this.onTap,
+  const _ShowcaseFallback({
+    required this.showcaseNodes,
+    required this.isExpired,
+    required this.userTier,
+    required this.isConnected,
+    required this.onConnect,
   });
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final primaryColor = theme.colorScheme.primary;
+    final s = AuthI18n.t;
 
-    return InkWell(
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-        color: isSelected ? primaryColor.withOpacity(0.06) : null,
-        child: Row(
+    final nodes = useState<List<Map<String, dynamic>>>(showcaseNodes);
+    final apiFailed = useState(false);
+
+    useEffect(() {
+      if (showcaseNodes.isNotEmpty) { nodes.value = showcaseNodes; return null; }
+      () async {
+        final prefs = await SharedPreferences.getInstance();
+        final auth = AuthService(prefs);
+        final fetched = await auth.getShowcaseNodes();
+        if (fetched.isNotEmpty) {
+          nodes.value = fetched;
+        } else {
+          apiFailed.value = true;
+          final isPaid = userTier == 'vip' || userTier == 'svip';
+          nodes.value = _fallbackNodes.map((n) {
+            final m = Map<String, dynamic>.from(n);
+            if (isPaid) m['locked'] = false;
+            return m;
+          }).toList();
+        }
+      }();
+      return null;
+    }, [showcaseNodes]);
+
+    if (nodes.value.isEmpty) {
+      return Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
           children: [
-            SizedBox(width: 36, height: 28, child: Center(child: leading)),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    title,
-                    style: theme.textTheme.bodyMedium?.copyWith(
-                      fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
-                      color: locked ? theme.colorScheme.onSurfaceVariant : null,
-                    ),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                  if (subtitle != null)
-                    Text(
-                      subtitle!,
-                      style: theme.textTheme.bodySmall?.copyWith(
-                        color: subtitleColor ?? theme.colorScheme.onSurfaceVariant,
-                        fontSize: 11,
-                      ),
-                    ),
-                ],
-              ),
+            Text(s['connectFirst'] ?? '请先连接', style: theme.textTheme.bodyMedium),
+            const SizedBox(height: 16),
+            FilledButton.icon(
+              onPressed: onConnect,
+              icon: const Icon(Icons.flash_on_rounded, size: 18),
+              label: Text(s['oneClickConnect'] ?? '一键连接'),
             ),
-            if (locked)
-              const Icon(Icons.lock_rounded, size: 16, color: Colors.orange)
-            else
-              _RadioDot(isSelected: isSelected, color: primaryColor),
           ],
         ),
-      ),
-    );
-  }
-}
+      );
+    }
 
-/// Custom radio dot.
-class _RadioDot extends StatelessWidget {
-  final bool isSelected;
-  final Color color;
+    final isPaidUser = userTier == 'vip' || userTier == 'svip';
 
-  const _RadioDot({required this.isSelected, required this.color});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: 22,
-      height: 22,
-      decoration: BoxDecoration(
-        shape: BoxShape.circle,
-        border: Border.all(
-          color: isSelected ? color : Colors.grey.shade400,
-          width: 2,
-        ),
-      ),
-      child: isSelected
-          ? Center(
-              child: Container(
-                width: 12,
-                height: 12,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: color,
-                ),
-              ),
-            )
-          : null,
+    return ListView(
+      padding: const EdgeInsets.symmetric(vertical: 8),
+      children: [
+        if (!isConnected)
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+            child: FilledButton.icon(
+              onPressed: onConnect,
+              icon: const Icon(Icons.flash_on_rounded, size: 18),
+              label: Text(s['oneClickConnect'] ?? '一键连接'),
+              style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(44)),
+            ),
+          ),
+        if (!isConnected) const SizedBox(height: 4),
+        if (apiFailed.value)
+          Container(
+            margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            decoration: BoxDecoration(
+              color: Colors.orange.shade50,
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: Colors.orange.shade200),
+            ),
+            child: Row(
+              children: [
+                Icon(Icons.wifi_off_rounded, size: 16, color: Colors.orange.shade700),
+                const SizedBox(width: 8),
+                Expanded(child: Text(
+                  s['networkErrorDesc'] ?? '未连接VPN，显示预览节点',
+                  style: TextStyle(fontSize: 12, color: Colors.orange.shade800),
+                )),
+              ],
+            ),
+          ),
+        ...nodes.value.map((n) {
+          final locked = isExpired || (!isPaidUser && n['tier'] == 'paid');
+          return _SwipeNodeTile(
+            flagWidget: IPCountryFlag(countryCode: n['cc'] as String? ?? '', organization: '', size: 28),
+            title: '${n['name']}|${n['tag']}',
+            subtitle: locked ? (s['paidRegion'] ?? '') : '',
+            delay: 0,
+            isSelected: false,
+            locked: locked,
+            onDoubleTap: locked ? () => showPlansSheet(context) : onConnect,
+            onTest: null,
+            onCopy: null,
+            onInfo: null,
+          );
+        }),
+      ],
     );
   }
 }
