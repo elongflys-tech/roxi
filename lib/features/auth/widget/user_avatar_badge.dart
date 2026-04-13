@@ -47,8 +47,8 @@ class UserAvatarBadge extends HookWidget {
             if (status == 'paid') {
               // Determine VIP vs SVIP from user info
               final user = await auth.getUserInfo();
-              final planName = (user?['plan_name'] as String? ?? '').toLowerCase();
-              if (planName.contains('svip') || planName.contains('premium')) {
+              final userTier = (user?['tier'] as String? ?? 'vip').toLowerCase();
+              if (userTier == 'svip') {
                 tier.value = 'svip';
               } else {
                 tier.value = 'vip';
