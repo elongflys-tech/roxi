@@ -6,7 +6,7 @@ on:
       version:
         description: 'Version number (e.g. 1.0.2)'
         required: true
-        default: '1.0.2'
+        default: '1.2.2'
 
 env:
   FLUTTER_VERSION: '3.38.5'
@@ -98,6 +98,16 @@ jobs:
             --endpoint-url "$R2_EP"
 
           echo "Done! https://dl.roxi.cc/roxi-latest.apk"
+
+      - name: Purge CDN Cache
+        env:
+          CF_API_TOKEN: ${{ secrets.CF_API_TOKEN }}
+        run: |
+          curl -s -X POST "https://api.cloudflare.com/client/v4/zones/1850ad3746304d9dd2480060d4e55747/purge_cache" \
+            -H "Authorization: Bearer $CF_API_TOKEN" \
+            -H "Content-Type: application/json" \
+            --data '{"files":["https://dl.roxi.cc/roxi-latest.apk","https://dl.roxi.cc/roxi-arm64-v${{ github.event.inputs.version }}.apk"]}' \
+            | python3 -c "import sys,json; r=json.load(sys.stdin); print('CDN purge OK' if r.get('success') else f'CDN purge FAILED: {r}')"
 
       - name: Upload Artifact
         uses: actions/upload-artifact@v6
