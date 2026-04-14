@@ -47,7 +47,7 @@ Color _delayColor(int delay) {
   return Colors.red;
 }
 
-/// Full-screen node list page.
+/// Full-screen node list page (pushed via Navigator, has back button).
 class NodeListPage extends HookConsumerWidget {
   const NodeListPage({super.key});
 
@@ -61,20 +61,21 @@ class NodeListPage extends HookConsumerWidget {
     final isConnected = connectionStatus == const Connected();
     final proxiesAsync = ref.watch(proxiesOverviewNotifierProvider);
     final activeProxy = ref.watch(activeProxyNotifierProvider).valueOrNull;
-    final activeProfile = ref.watch(activeProfileProvider).valueOrNull;
 
-    // Check if user is expired (no active subscription)
     final isExpired = useState(false);
     final userTier = useState<String>('free');
-
-    // Show loading until expiry check completes
     final expiryChecked = useState(false);
+
     useEffect(() {
       () async {
         try {
           final prefs = await SharedPreferences.getInstance();
           final auth = AuthService(prefs);
           if (!auth.isLoggedIn) { expiryChecked.value = true; return; }
+          final ct = auth.cachedTier;
+          if (ct == 'vip' || ct == 'svip') {
+            userTier.value = ct;
+          }
           final userInfo = await auth.getUserInfo();
           if (userInfo != null) {
             final tier = userInfo['tier'] as String? ?? 'free';
@@ -104,6 +105,82 @@ class NodeListPage extends HookConsumerWidget {
           icon: const Icon(Icons.arrow_back_rounded),
           onPressed: () => Navigator.of(context).pop(),
         ),
+        title: Text(s['nodeList'] ?? '节点列表', style: theme.textTheme.titleMedium),
+        centerTitle: true,
+        elevation: 0,
+        scrolledUnderElevation: 0,
+      ),
+      body: SafeArea(
+        top: false,
+        child: !expiryChecked.value
+          ? const Center(child: CircularProgressIndicator())
+          : _ConnectedNodeList(
+              proxiesAsync: proxiesAsync,
+              activeProxy: activeProxy,
+              isExpired: isExpired.value,
+              userTier: userTier.value,
+              isConnected: isConnected,
+            ),
+      ),
+    );
+  }
+}
+
+/// Node list tab page (used as a NavigationRail tab on desktop, no back button).
+class NodeListTabPage extends HookConsumerWidget {
+  const NodeListTabPage({super.key});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final theme = Theme.of(context);
+    final s = AuthI18n.t;
+    final connectionStatus = ref.watch(
+      connectionNotifierProvider.select((v) => v.valueOrNull ?? const Disconnected()),
+    );
+    final isConnected = connectionStatus == const Connected();
+    final proxiesAsync = ref.watch(proxiesOverviewNotifierProvider);
+    final activeProxy = ref.watch(activeProxyNotifierProvider).valueOrNull;
+
+    final isExpired = useState(false);
+    final userTier = useState<String>('free');
+    final expiryChecked = useState(false);
+
+    useEffect(() {
+      () async {
+        try {
+          final prefs = await SharedPreferences.getInstance();
+          final auth = AuthService(prefs);
+          if (!auth.isLoggedIn) { expiryChecked.value = true; return; }
+          final ct = auth.cachedTier;
+          if (ct == 'vip' || ct == 'svip') {
+            userTier.value = ct;
+          }
+          final userInfo = await auth.getUserInfo();
+          if (userInfo != null) {
+            final tier = userInfo['tier'] as String? ?? 'free';
+            userTier.value = tier;
+            if (tier == 'vip' || tier == 'svip') {
+              isExpired.value = false;
+              expiryChecked.value = true;
+              return;
+            }
+          }
+          final status = await auth.getTrialStatus();
+          if (status != null) {
+            if (status['status'] == 'expired') isExpired.value = true;
+            if (status['status'] == 'paid' && userTier.value == 'free') userTier.value = 'vip';
+            expiryChecked.value = true;
+            return;
+          }
+        } catch (_) {}
+        expiryChecked.value = true;
+      }();
+      return null;
+    }, []);
+
+    return Scaffold(
+      appBar: AppBar(
+        automaticallyImplyLeading: false,
         title: Text(s['nodeList'] ?? '节点列表', style: theme.textTheme.titleMedium),
         centerTitle: true,
         elevation: 0,
@@ -192,16 +269,31 @@ class _ConnectedNodeList extends HookConsumerWidget {
         final realNodes = (group?.items ?? []).where((n) => !n.isGroup && n.tag.isNotEmpty).toList();
 
         if (realNodes.isEmpty) {
-          return _ShowcaseFallback(
-            showcaseNodes: showcaseNodes.value,
-            isExpired: isExpired,
-            userTier: userTier,
-            isConnected: isConnected,
-            onConnect: () {
-              if (isExpired) { showPlansSheet(context); return; }
+          // Auto-connect if not connected — nodes will appear after connection
+          if (!isConnected) {
+            Future.microtask(() {
               ref.read(connectionNotifierProvider.notifier).toggleConnection();
-              if (Navigator.of(context).canPop()) Navigator.of(context).pop();
-            },
+            });
+            return Center(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const CircularProgressIndicator(),
+                  const SizedBox(height: 16),
+                  Text(s['connectFirst'] ?? '正在连接，请稍候...'),
+                ],
+              ),
+            );
+          }
+          return Center(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const CircularProgressIndicator(),
+                const SizedBox(height: 16),
+                Text(s['connectFirst'] ?? '正在加载节点...'),
+              ],
+            ),
           );
         }
 
@@ -215,27 +307,7 @@ class _ConnectedNodeList extends HookConsumerWidget {
           if (e.value.any((n) => _isFreeNode(n.tagDisplay))) freeCountries.add(e.key);
         }
 
-        // Extra showcase nodes
-        final realCountries = grouped.keys.toSet();
-        final extraPaidNodes = <Map<String, dynamic>>[];
-        for (final sn in showcaseNodes.value) {
-          final tier = sn['tier'] as String? ?? '';
-          if (tier == 'paid') {
-            extraPaidNodes.add(sn);
-          } else if (tier == 'free') {
-            final name = sn['name'] as String? ?? '';
-            if (!realCountries.any((c) => name.contains(c))) extraPaidNodes.add(sn);
-          }
-        }
-        final extraGrouped = <String, List<Map<String, dynamic>>>{};
-        for (final n in extraPaidNodes) {
-          final name = n['name'] as String? ?? '';
-          String country = '其他';
-          for (final c in ['香港','台湾','日本','新加坡','美国','韩国','英国','德国','法国','澳大利亚','加拿大','荷兰','印度','巴西','土耳其','俄罗斯','阿根廷','爱尔兰','阿联酋','澳门']) {
-            if (name.contains(c)) { country = c; break; }
-          }
-          extraGrouped.putIfAbsent(country, () => []).add(n);
-        }
+        // Extra showcase nodes — REMOVED: only show real nodes
 
         final sortedCountries = grouped.keys.toList()
           ..sort((a, b) {
@@ -244,23 +316,19 @@ class _ConnectedNodeList extends HookConsumerWidget {
             if (!af && bf) return 1;
             return a.compareTo(b);
           });
-        final extraCountries = extraGrouped.keys.where((c) => !realCountries.contains(c)).toList()..sort();
         final activeTag = activeProxy?.tag ?? '';
-        final isPaidUser = userTier == 'vip' || userTier == 'svip';
 
         return ListView(
           padding: const EdgeInsets.symmetric(vertical: 8),
           children: [
             ...sortedCountries.expand((country) {
               final countryNodes = grouped[country]!;
-              final isFree = freeCountries.contains(country);
-              final isUnlocked = !isExpired && (isPaidUser || isFree);
               return [
                 _SectionHeader(
                   label: country,
                   count: countryNodes.length,
-                  color: isUnlocked ? Colors.green : Colors.orange,
-                  locked: !isUnlocked,
+                  color: Colors.green,
+                  locked: false,
                 ),
                 ...countryNodes.map((node) {
                   final selected = node.tag == activeTag;
@@ -273,9 +341,8 @@ class _ConnectedNodeList extends HookConsumerWidget {
                     subtitle: '${node.type}',
                     delay: delay,
                     isSelected: selected,
-                    locked: !isUnlocked,
+                    locked: false,
                     onDoubleTap: () async {
-                      if (!isUnlocked) { showPlansSheet(context); return; }
                       if (!selected && group != null) {
                         await ref.read(proxiesOverviewNotifierProvider.notifier)
                             .changeProxy(group.tag, node.tag);
@@ -298,38 +365,27 @@ class _ConnectedNodeList extends HookConsumerWidget {
                 }),
               ];
             }),
-            // Extra showcase paid nodes
-            if (!isPaidUser && extraCountries.isNotEmpty) ...[
-              _SectionHeader(label: s['paidRegion']!, count: extraPaidNodes.length, color: Colors.orange, locked: true),
-              ...extraCountries.expand((country) {
-                return (extraGrouped[country] ?? []).map((n) => _SwipeNodeTile(
-                  flagWidget: IPCountryFlag(countryCode: n['cc'] as String? ?? '', organization: '', size: 28),
-                  title: '${n['name']}|${n['tag']}',
-                  subtitle: '',
-                  delay: 0,
-                  isSelected: false,
-                  locked: true,
-                  onDoubleTap: () => showPlansSheet(context),
-                  onTest: null,
-                  onCopy: null,
-                  onInfo: null,
-                ));
-              }),
-            ],
           ],
         );
       },
-      error: (_, __) => _ShowcaseFallback(
-        showcaseNodes: showcaseNodes.value,
-        isExpired: isExpired,
-        userTier: userTier,
-        isConnected: isConnected,
-        onConnect: () {
-          if (isExpired) { showPlansSheet(context); return; }
-          ref.read(connectionNotifierProvider.notifier).toggleConnection();
-          if (Navigator.of(context).canPop()) Navigator.of(context).pop();
-        },
-      ),
+      error: (_, __) {
+        // Auto-connect on error (sing-box not running)
+        if (!isConnected) {
+          Future.microtask(() {
+            ref.read(connectionNotifierProvider.notifier).toggleConnection();
+          });
+        }
+        return Center(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const CircularProgressIndicator(),
+              const SizedBox(height: 16),
+              Text(s['connectFirst'] ?? '正在连接，请稍候...'),
+            ],
+          ),
+        );
+      },
       loading: () => const Center(child: CircularProgressIndicator()),
     );
   }
