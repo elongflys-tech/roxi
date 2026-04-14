@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import 'package:hiddify/features/connection/model/connection_status.dart';
 import 'package:hiddify/features/connection/notifier/connection_notifier.dart';
 import 'package:hiddify/features/home/widget/node_list_card.dart';
 import 'package:hiddify/features/home/widget/node_list_sheet.dart';
 import 'package:hiddify/features/proxy/active/active_proxy_notifier.dart';
 import 'package:hiddify/features/proxy/active/ip_widget.dart';
+import 'package:hiddify/utils/utils.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 
 class NodeSelectorCard extends HookConsumerWidget {
@@ -39,7 +41,13 @@ class NodeSelectorCard extends HookConsumerWidget {
     }
 
     return GestureDetector(
-      onTap: () => showNodeListSheet(context),
+      onTap: () {
+        if (PlatformUtils.isDesktop) {
+          context.goNamed('nodes');
+        } else {
+          showNodeListSheet(context);
+        }
+      },
       child: Container(
         margin: const EdgeInsets.symmetric(horizontal: 32),
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
