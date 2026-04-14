@@ -255,6 +255,9 @@ class _ConnectedNodeList extends HookConsumerWidget {
     final s = AuthI18n.t;
 
     final showcaseNodes = useState<List<Map<String, dynamic>>>([]);
+    // Guard: only auto-connect once per page lifecycle
+    final hasAutoConnected = useState(false);
+
     useEffect(() {
       () async {
         final prefs = await SharedPreferences.getInstance();
@@ -269,11 +272,25 @@ class _ConnectedNodeList extends HookConsumerWidget {
         final realNodes = (group?.items ?? []).where((n) => !n.isGroup && n.tag.isNotEmpty).toList();
 
         if (realNodes.isEmpty) {
-          // Auto-connect if not connected — nodes will appear after connection
-          if (!isConnected) {
+          // Auto-connect once if not connected — nodes will appear after connection
+          if (!isConnected && !hasAutoConnected.value) {
+            hasAutoConnected.value = true;
             Future.microtask(() {
               ref.read(connectionNotifierProvider.notifier).toggleConnection();
             });
+            return Center(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const CircularProgressIndicator(),
+                  const SizedBox(height: 16),
+                  Text(s['connectFirst'] ?? '正在连接，请稍候...'),
+                ],
+              ),
+            );
+          }
+          // Already tried auto-connect or currently connecting — just show loading
+          if (!isConnected) {
             return Center(
               child: Column(
                 mainAxisSize: MainAxisSize.min,
@@ -296,6 +313,9 @@ class _ConnectedNodeList extends HookConsumerWidget {
             ),
           );
         }
+
+        // Successfully got nodes — reset the guard so re-entering the page can auto-connect again
+        if (hasAutoConnected.value) hasAutoConnected.value = false;
 
         // Group by country
         final grouped = <String, List<OutboundInfo>>{};
@@ -369,8 +389,9 @@ class _ConnectedNodeList extends HookConsumerWidget {
         );
       },
       error: (_, __) {
-        // Auto-connect on error (sing-box not running)
-        if (!isConnected) {
+        // Auto-connect once on error (sing-box not running)
+        if (!isConnected && !hasAutoConnected.value) {
+          hasAutoConnected.value = true;
           Future.microtask(() {
             ref.read(connectionNotifierProvider.notifier).toggleConnection();
           });
