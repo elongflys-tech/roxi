@@ -15,9 +15,6 @@ env:
 jobs:
   build-android:
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: hiddify-app
     steps:
       - name: Checkout
         uses: actions/checkout@v6
@@ -50,7 +47,7 @@ jobs:
           echo "keyPassword=$ANDROID_KEY_PASSWORD" >> android/key.properties
           echo "keyAlias=$ANDROID_KEY_ALIAS" >> android/key.properties
           echo "storeFile=../../android/release-keystore.jks" >> android/key.properties
-          echo "Keystore and key.properties created"
+          ls -la android/release-keystore.jks android/key.properties
 
       - name: Download Android core libs
         run: |
@@ -69,12 +66,10 @@ jobs:
           dart pub global activate protoc_plugin || true
           dart run build_runner build --delete-conflicting-outputs || true
           make gen translate || true
-          # Ensure generated files exist even if build_runner partially failed
           find lib -name "*.g.dart" | head -5 || true
 
       - name: Build APK
-        run: |
-          flutter build apk --release --split-per-abi --target-platform android-arm64
+        run: flutter build apk --release --split-per-abi --target-platform android-arm64
 
       - name: Package APK
         run: |
@@ -108,5 +103,5 @@ jobs:
         if: always()
         with:
           name: android-build
-          path: hiddify-app/out/
+          path: out/
           retention-days: 7
