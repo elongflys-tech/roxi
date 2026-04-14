@@ -71,7 +71,7 @@ android {
     }
 
     defaultConfig {
-        applicationId "cc.roxi.app"
+        applicationId "app.hiddify.com"
         minSdkVersion flutter.minSdkVersion
         targetSdkVersion 36
         versionCode flutterVersionCode.toInteger()
