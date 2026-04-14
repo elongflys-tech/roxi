@@ -67,7 +67,9 @@ class DeviceFingerprint {
       final memInfo = await _readFile('/proc/meminfo');
       final memMatch = RegExp(r'MemTotal:\s*(\d+)').firstMatch(memInfo);
       if (memMatch != null) {
-        final memGb = (int.parse(memMatch.group(1)!) / 1048576).round();
+        final memKb = int.parse(memMatch.group(1)!);
+        // Round to nearest power-of-2 GB to avoid edge-case drift
+        final memGb = _nearestPow2Gb(memKb);
         parts.add('mem${memGb}g');
       }
 
@@ -79,15 +81,36 @@ class DeviceFingerprint {
       final device = await _shellCmd('getprop', ['ro.product.device']);
       if (device.isNotEmpty) parts.add(device);
 
-      // Serial number (stable, but may be "unknown" on newer Android)
-      final serial = await _shellCmd('getprop', ['ro.serialno']);
-      if (serial.isNotEmpty && serial != 'unknown') parts.add(serial);
+      // NOTE: ro.serialno is intentionally excluded — it returns "unknown"
+      // on Android 10+ for non-system apps, causing fingerprint instability
+      // across reinstalls.
 
       // Display density (stable)
       final density = await _shellCmd('getprop', ['ro.sf.lcd_density']);
       if (density.isNotEmpty) parts.add('dpi$density');
+
+      // SoC / board info (very stable, hardware-level)
+      final board = await _shellCmd('getprop', ['ro.product.board']);
+      if (board.isNotEmpty) parts.add(board);
+      final platform = await _shellCmd('getprop', ['ro.board.platform']);
+      if (platform.isNotEmpty) parts.add(platform);
     } catch (_) {}
     return parts;
+  }
+
+  /// Round memory (in KB) to nearest power-of-2 GB to avoid edge-case drift.
+  /// e.g. 3.9GB and 4.1GB both → 4, 7.8GB and 8.2GB both → 8.
+  static int _nearestPow2Gb(int memKb) {
+    final memGbRaw = memKb / 1048576.0;
+    // Common RAM sizes: 1, 2, 3, 4, 6, 8, 12, 16, 32, 64
+    const sizes = [1, 2, 3, 4, 6, 8, 12, 16, 32, 64];
+    int best = sizes[0];
+    double bestDist = (memGbRaw - best).abs();
+    for (final s in sizes) {
+      final dist = (memGbRaw - s).abs();
+      if (dist < bestDist) { best = s; bestDist = dist; }
+    }
+    return best;
   }
 
   // ── iOS fingerprint ──
