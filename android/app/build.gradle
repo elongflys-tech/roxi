@@ -71,7 +71,7 @@ android {
     }
 
     defaultConfig {
-        applicationId "cc.roxi.app"
+        applicationId "app.hiddify.com"
         minSdkVersion flutter.minSdkVersion
         targetSdkVersion 36
         versionCode flutterVersionCode.toInteger()
@@ -97,6 +97,8 @@ android {
                 keyPassword keystoreProperties['keyPassword']
                 storeFile file(keystoreProperties['storeFile'])
                 storePassword keystoreProperties['storePassword']
+                v1SigningEnabled true
+                v2SigningEnabled true
             }
         }
     }
