@@ -30,6 +30,7 @@ part 'routing_config_notifier.g.dart';
 // each branch in go router has its own focus scope
 final branchesScope = <String, FocusScopeNode>{
   'home': FocusScopeNode(),
+  'nodes': FocusScopeNode(),
   'profiles': FocusScopeNode(),
   'settings': FocusScopeNode(),
   'logs': FocusScopeNode(),
@@ -43,11 +44,11 @@ final loadingConfig = RoutingConfig(
 
 String getNameOfBranch(bool isMobileBreakpoint, bool showProfilesAction, int index) => isMobileBreakpoint
     ? ['home', 'settings'][index]
-    : ['home', 'settings', 'logs', 'about'][index];
+    : ['home', 'nodes', 'settings', 'logs', 'about'][index];
 
 int getIndexOfBranch(bool isMobileBreakpoint, bool showProfilesAction, String name) => isMobileBreakpoint
     ? ['home', 'settings'].indexOf(name)
-    : ['home', 'settings', 'logs', 'about'].indexOf(name);
+    : ['home', 'nodes', 'settings', 'logs', 'about'].indexOf(name);
 
 @Riverpod(keepAlive: true)
 class RoutingConfigNotifier extends _$RoutingConfigNotifier {
@@ -127,6 +128,17 @@ class RoutingConfigNotifier extends _$RoutingConfigNotifier {
                 ),
               ],
             ),
+            // Nodes tab (desktop only — globe icon in NavigationRail)
+            if (!isMobileBreakpoint)
+              StatefulShellBranch(
+                routes: <GoRoute>[
+                  GoRoute(
+                    name: 'nodes',
+                    path: '/nodes',
+                    builder: (_, _) => FocusScope(node: branchesScope['nodes'], child: const NodeListTabPage()),
+                  ),
+                ],
+              ),
             StatefulShellBranch(
               routes: <GoRoute>[
                 GoRoute(
