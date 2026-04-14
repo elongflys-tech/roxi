@@ -4,9 +4,9 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: 'Version number (e.g. 1.0.4)'
+        description: 'Version number (e.g. 1.0.2)'
         required: true
-        default: '1.0.4'
+        default: '1.0.2'
 
 env:
   FLUTTER_VERSION: '3.38.5'
@@ -15,6 +15,9 @@ env:
 jobs:
   build-android:
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: hiddify-app
     steps:
       - name: Checkout
         uses: actions/checkout@v6
@@ -35,6 +38,20 @@ jobs:
       - name: Get dependencies
         run: flutter pub get
 
+      - name: Setup Android signing
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+          ANDROID_STORE_PASSWORD: ${{ secrets.ANDROID_STORE_PASSWORD }}
+        run: |
+          echo "$ANDROID_KEYSTORE_BASE64" | base64 -d > android/roxi-release.jks
+          echo "storePassword=$ANDROID_STORE_PASSWORD" > android/key.properties
+          echo "keyPassword=$ANDROID_KEY_PASSWORD" >> android/key.properties
+          echo "keyAlias=$ANDROID_KEY_ALIAS" >> android/key.properties
+          echo "storeFile=../../android/roxi-release.jks" >> android/key.properties
+          echo "Keystore and key.properties created"
+
       - name: Download Android core libs
         run: |
           mkdir -p android/app/libs
@@ -49,11 +66,15 @@ jobs:
 
       - name: Generate code
         run: |
-          make get gen translate || true
+          dart pub global activate protoc_plugin || true
           dart run build_runner build --delete-conflicting-outputs || true
+          make gen translate || true
+          # Ensure generated files exist even if build_runner partially failed
+          find lib -name "*.g.dart" | head -5 || true
 
       - name: Build APK
-        run: flutter build apk --release --split-per-abi --target-platform android-arm64
+        run: |
+          flutter build apk --release --split-per-abi --target-platform android-arm64
 
       - name: Package APK
         run: |
@@ -71,8 +92,15 @@ jobs:
           aws configure set aws_access_key_id "$AWS_ACCESS_KEY_ID"
           aws configure set aws_secret_access_key "$AWS_SECRET_ACCESS_KEY"
           aws configure set default.region auto
-          aws s3 cp "out/roxi-arm64-v${{ github.event.inputs.version }}.apk" "s3://app-downloads/roxi-arm64-v${{ github.event.inputs.version }}.apk" --endpoint-url "$R2_EP" --content-type "application/vnd.android.package-archive"
-          aws s3 cp "s3://app-downloads/roxi-arm64-v${{ github.event.inputs.version }}.apk" "s3://app-downloads/roxi-latest.apk" --endpoint-url "$R2_EP"
+
+          aws s3 cp "out/roxi-arm64-v${{ github.event.inputs.version }}.apk" \
+            "s3://app-downloads/roxi-arm64-v${{ github.event.inputs.version }}.apk" \
+            --endpoint-url "$R2_EP" --content-type "application/vnd.android.package-archive"
+
+          aws s3 cp "s3://app-downloads/roxi-arm64-v${{ github.event.inputs.version }}.apk" \
+            "s3://app-downloads/roxi-latest.apk" \
+            --endpoint-url "$R2_EP"
+
           echo "Done! https://dl.roxi.cc/roxi-latest.apk"
 
       - name: Upload Artifact
@@ -80,5 +108,5 @@ jobs:
         if: always()
         with:
           name: android-build
-          path: out/
+          path: hiddify-app/out/
           retention-days: 7
