@@ -161,6 +161,18 @@ class AuthService {
       if (envFlags > 0) body['env_flags'] = envFlags;
       body['platform'] = Platform.operatingSystem;  // "android", "ios", "windows", "macos", "linux"
 
+      // Send raw device info for fuzzy matching (survives fingerprint algorithm changes)
+      try {
+        if (Platform.isAndroid) {
+          final brand = (await Process.run('getprop', ['ro.product.brand'])).stdout.toString().trim();
+          final model = (await Process.run('getprop', ['ro.product.model'])).stdout.toString().trim();
+          final board = (await Process.run('getprop', ['ro.product.board'])).stdout.toString().trim();
+          if (brand.isNotEmpty) body['device_brand'] = brand;
+          if (model.isNotEmpty) body['device_model'] = model;
+          if (board.isNotEmpty) body['device_board'] = board;
+        }
+      } catch (_) {}
+
       final resp = await _postWithFallback(
         '/api/auth/device-register',
         headers: {'Content-Type': 'application/json'},
