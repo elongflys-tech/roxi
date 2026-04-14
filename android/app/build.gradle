@@ -54,7 +54,7 @@ def flutterVersionName = localProperties.getProperty('flutter.versionName') ?: '
 android {
     namespace 'com.hiddify.hiddify'
     testNamespace "test.com.hiddify.hiddify"
-    compileSdkVersion 36
+    compileSdkVersion 34
     ndkVersion "28.2.13676358"
 
     compileOptions {
@@ -71,9 +71,9 @@ android {
     }
 
     defaultConfig {
-        applicationId "app.hiddify.com"
+        applicationId "cc.roxi.app"
         minSdkVersion flutter.minSdkVersion
-        targetSdkVersion 36
+        targetSdkVersion 34
         versionCode flutterVersionCode.toInteger()
         versionName flutterVersionName
         multiDexEnabled true
