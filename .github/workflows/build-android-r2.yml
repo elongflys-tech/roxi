@@ -35,24 +35,6 @@ jobs:
       - name: Get dependencies
         run: flutter pub get
 
-      - name: Setup Android signing
-        env:
-          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
-          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
-          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
-          ANDROID_STORE_PASSWORD: ${{ secrets.ANDROID_STORE_PASSWORD }}
-        run: |
-          KEYSTORE_PATH="$(pwd)/android/release-keystore.jks"
-          echo "$ANDROID_KEYSTORE_BASE64" | base64 -d > "$KEYSTORE_PATH"
-          echo "storePassword=$ANDROID_STORE_PASSWORD" > android/key.properties
-          echo "keyPassword=$ANDROID_KEY_PASSWORD" >> android/key.properties
-          echo "keyAlias=$ANDROID_KEY_ALIAS" >> android/key.properties
-          echo "storeFile=$KEYSTORE_PATH" >> android/key.properties
-          echo "--- Verify keystore ---"
-          ls -la "$KEYSTORE_PATH"
-          cat android/key.properties | grep -v Password
-          keytool -list -keystore "$KEYSTORE_PATH" -storepass "$ANDROID_STORE_PASSWORD" 2>&1 | head -5
-
       - name: Download Android core libs
         run: |
           mkdir -p android/app/libs
@@ -74,15 +56,6 @@ jobs:
 
       - name: Build APK
         run: flutter build apk --release --split-per-abi --target-platform android-arm64
-
-      - name: Verify APK signature
-        run: |
-          APK="build/app/outputs/flutter-apk/app-arm64-v8a-release.apk"
-          echo "--- APK info ---"
-          ls -lh "$APK"
-          echo "--- Signature check ---"
-          $ANDROID_HOME/build-tools/*/apksigner verify --verbose --print-certs "$APK" 2>&1 || echo "apksigner not found, trying jarsigner"
-          jarsigner -verify "$APK" 2>&1 | head -5
 
       - name: Package APK
         run: |
