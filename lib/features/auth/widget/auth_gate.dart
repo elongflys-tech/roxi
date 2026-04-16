@@ -101,7 +101,10 @@ const _inviteAppliedKey = 'roxi_clipboard_invite_applied';
 Future<void> _tryApplyClipboardInvite(AuthService auth, SharedPreferences prefs) async {
   if (prefs.getBool(_inviteAppliedKey) == true) return; // already tried once
   try {
-    final data = await Clipboard.getData(Clipboard.kTextPlain);
+    final data = await Clipboard.getData(Clipboard.kTextPlain).timeout(
+      const Duration(seconds: 2),
+      onTimeout: () => null,
+    );
     final text = data?.text?.trim() ?? '';
     if (text.startsWith('roxi-invite:') && text.length > 12) {
       final code = text.substring(12).trim();
