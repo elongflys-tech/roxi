@@ -27,23 +27,32 @@ class _PlansSheet extends HookWidget {
     final s = AuthI18n.t;
     final plans = useState<List<Map<String, dynamic>>>([]);
     final isLoading = useState(true);
+    final loadError = useState(false);
     final remainingSec = useState<int?>(null);
     final discountLabel = useState<String>('');
 
-    useEffect(() {
-      () async {
+    Future<void> loadPlans() async {
+      isLoading.value = true;
+      loadError.value = false;
+      try {
         final prefs = await SharedPreferences.getInstance();
         final auth = AuthService(prefs);
-        final fetched = await auth.getPlans();
+        final fetched = await auth.getPlans(forceRefresh: true).timeout(const Duration(seconds: 12));
         plans.value = fetched;
-        // Get countdown and label from first plan that has it
         if (fetched.isNotEmpty) {
           final sec = fetched[0]['discount_remaining_sec'] as int?;
           if (sec != null && sec > 0) remainingSec.value = sec;
           discountLabel.value = (fetched[0]['discount_label'] as String?) ?? '';
         }
-        isLoading.value = false;
-      }();
+        if (fetched.isEmpty) loadError.value = true;
+      } catch (_) {
+        loadError.value = true;
+      }
+      isLoading.value = false;
+    }
+
+    useEffect(() {
+      loadPlans();
       return null;
     }, []);
 
@@ -109,6 +118,29 @@ class _PlansSheet extends HookWidget {
               padding: EdgeInsets.all(32),
               child: Center(child: CircularProgressIndicator()),
             )
+          else if (loadError.value || plans.value.isEmpty)
+            Padding(
+              padding: const EdgeInsets.all(32),
+              child: Center(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.cloud_off_rounded, size: 40, color: Colors.grey.shade400),
+                    const SizedBox(height: 12),
+                    Text(
+                      s['plansLoadFailed'] ?? '加载套餐失败，请检查网络',
+                      style: TextStyle(color: Colors.grey.shade600, fontSize: 14),
+                      textAlign: TextAlign.center,
+                    ),
+                    const SizedBox(height: 16),
+                    FilledButton.tonal(
+                      onPressed: loadPlans,
+                      child: Text(s['retry'] ?? '重试'),
+                    ),
+                  ],
+                ),
+              ),
+            )
           else
             Flexible(
               child: ListView.builder(
@@ -136,14 +168,24 @@ class _PlansSheet extends HookWidget {
     );
     if (method == null || !context.mounted) return;
 
-    if (method == 'usdt') {
-      await _handleUsdtBuy(context, plan);
+    if (method!.startsWith('usdt_') || method == 'usdt' || method!.startsWith('usdc_')) {
+      // Parse token and chain from method string
+      // Format: "usdt_bsc", "usdc_polygon", "usdt" (trc20 default)
+      final isUsdc = method!.startsWith('usdc');
+      final token = isUsdc ? 'usdc' : 'usdt';
+      String chain;
+      if (method == 'usdt') {
+        chain = 'trc20';
+      } else {
+        chain = method!.split('_').last; // "bsc", "polygon", "arbitrum", "base"
+      }
+      await _handleCryptoBuy(context, plan, chain: chain, token: token);
     } else {
       await _handleCNYBuy(context, plan, method);
     }
   }
 
-  Future<void> _handleUsdtBuy(BuildContext context, Map<String, dynamic> plan) async {
+  Future<void> _handleCryptoBuy(BuildContext context, Map<String, dynamic> plan, {String chain = 'trc20', String token = 'usdt'}) async {
     final s = AuthI18n.t;
     final prefs = await SharedPreferences.getInstance();
     final auth = AuthService(prefs);
@@ -156,7 +198,7 @@ class _PlansSheet extends HookWidget {
     );
 
     try {
-      final order = await auth.createOrder(plan['id']).timeout(const Duration(seconds: 15));
+      final order = await auth.createOrder(plan['id'], chain: chain, token: token).timeout(const Duration(seconds: 15));
       if (!context.mounted) return;
       Navigator.of(context).pop(); // dismiss loading
 
@@ -493,6 +535,14 @@ class _PaymentDialog extends HookWidget {
 
     final address = payInfo['usdt_address'] as String? ?? '';
     final amount = payInfo['pay_amount_usdt'] ?? 0;
+    final chain = payInfo['chain'] as String? ?? 'trc20';
+    final token = payInfo['token'] as String? ?? 'usdt';
+    final tokenLabel = token.toUpperCase();
+    final chainLabel = chain == 'bsc' ? 'BSC (BEP-20)'
+        : chain == 'polygon' ? 'Polygon'
+        : chain == 'arbitrum' ? 'Arbitrum'
+        : chain == 'base' ? 'Base'
+        : 'TRC-20';
 
     // Poll order status
     useEffect(() {
@@ -551,7 +601,7 @@ class _PaymentDialog extends HookWidget {
                 ),
                 child: Column(
                   children: [
-                    Text('$amount USDT', style: theme.textTheme.headlineMedium?.copyWith(color: theme.colorScheme.primary, fontWeight: FontWeight.bold)),
+                    Text('$amount $tokenLabel', style: theme.textTheme.headlineMedium?.copyWith(color: theme.colorScheme.primary, fontWeight: FontWeight.bold)),
                     const SizedBox(height: 2),
                     Text(s['exactAmount']!, style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant, fontSize: 11)),
                   ],
@@ -566,7 +616,7 @@ class _PaymentDialog extends HookWidget {
                   dataModuleStyle: const QrDataModuleStyle(dataModuleShape: QrDataModuleShape.square, color: Color(0xFF1a1a2e))),
               ),
               const SizedBox(height: 8),
-              Text('TRC-20', style: theme.textTheme.labelSmall?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
+              Text('$tokenLabel · $chainLabel', style: theme.textTheme.labelSmall?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
               const SizedBox(height: 12),
               InkWell(
                 borderRadius: BorderRadius.circular(8),
@@ -633,46 +683,137 @@ class _PayMethodPicker extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     return SafeArea(
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Container(
-              width: 36, height: 4,
-              decoration: BoxDecoration(
-                color: theme.colorScheme.onSurfaceVariant.withOpacity(0.3),
-                borderRadius: BorderRadius.circular(2),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          // Fixed header: handle bar + title
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  width: 36, height: 4,
+                  decoration: BoxDecoration(
+                    color: theme.colorScheme.onSurfaceVariant.withOpacity(0.3),
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+                const SizedBox(height: 16),
+                Text(AuthI18n.t['selectPayMethod'] ?? '选择支付方式', style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold)),
+                const SizedBox(height: 12),
+              ],
+            ),
+          ),
+          // Scrollable payment options
+          Flexible(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  _PayMethodTile(
+                    icon: Icons.payment_rounded,
+                    color: const Color(0xFF1677FF),
+                    label: AuthI18n.t['alipay'] ?? '支付宝',
+                    subtitle: AuthI18n.t['recommended'] ?? '推荐',
+                    onTap: () => Navigator.of(context).pop('alipay'),
+                  ),
+                  const SizedBox(height: 8),
+                  _PayMethodTile(
+                    icon: Icons.chat_rounded,
+                    color: const Color(0xFF07C160),
+                    label: AuthI18n.t['wechatPay'] ?? '微信支付',
+                    subtitle: '',
+                    onTap: () => Navigator.of(context).pop('wechat'),
+                  ),
+                  const SizedBox(height: 12),
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: Text('USDT', style: theme.textTheme.labelMedium?.copyWith(color: theme.colorScheme.onSurfaceVariant, fontWeight: FontWeight.w600)),
+                  ),
+                  const SizedBox(height: 6),
+                  _PayMethodTile(
+                    icon: Icons.currency_bitcoin_rounded,
+                    color: const Color(0xFFF0B90B),
+                    label: 'USDT (BSC)',
+                    subtitle: '手续费极低 · 推荐',
+                    onTap: () => Navigator.of(context).pop('usdt_bsc'),
+                  ),
+                  const SizedBox(height: 8),
+                  _PayMethodTile(
+                    icon: Icons.currency_bitcoin_rounded,
+                    color: const Color(0xFF8247E5),
+                    label: 'USDT (Polygon)',
+                    subtitle: '手续费极低',
+                    onTap: () => Navigator.of(context).pop('usdt_polygon'),
+                  ),
+                  const SizedBox(height: 8),
+                  _PayMethodTile(
+                    icon: Icons.currency_bitcoin_rounded,
+                    color: const Color(0xFF28A0F0),
+                    label: 'USDT (Arbitrum)',
+                    subtitle: '手续费极低',
+                    onTap: () => Navigator.of(context).pop('usdt_arbitrum'),
+                  ),
+                  const SizedBox(height: 8),
+                  _PayMethodTile(
+                    icon: Icons.currency_bitcoin_rounded,
+                    color: const Color(0xFF0052FF),
+                    label: 'USDT (Base)',
+                    subtitle: '手续费极低',
+                    onTap: () => Navigator.of(context).pop('usdt_base'),
+                  ),
+                  const SizedBox(height: 8),
+                  _PayMethodTile(
+                    icon: Icons.currency_bitcoin_rounded,
+                    color: const Color(0xFF26A17B),
+                    label: 'USDT (TRC-20)',
+                    subtitle: '',
+                    onTap: () => Navigator.of(context).pop('usdt'),
+                  ),
+                  const SizedBox(height: 12),
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: Text('USDC', style: theme.textTheme.labelMedium?.copyWith(color: theme.colorScheme.onSurfaceVariant, fontWeight: FontWeight.w600)),
+                  ),
+                  const SizedBox(height: 6),
+                  _PayMethodTile(
+                    icon: Icons.monetization_on_rounded,
+                    color: const Color(0xFF2775CA),
+                    label: 'USDC (BSC)',
+                    subtitle: '手续费极低',
+                    onTap: () => Navigator.of(context).pop('usdc_bsc'),
+                  ),
+                  const SizedBox(height: 8),
+                  _PayMethodTile(
+                    icon: Icons.monetization_on_rounded,
+                    color: const Color(0xFF2775CA),
+                    label: 'USDC (Polygon)',
+                    subtitle: '手续费极低',
+                    onTap: () => Navigator.of(context).pop('usdc_polygon'),
+                  ),
+                  const SizedBox(height: 8),
+                  _PayMethodTile(
+                    icon: Icons.monetization_on_rounded,
+                    color: const Color(0xFF2775CA),
+                    label: 'USDC (Arbitrum)',
+                    subtitle: '手续费极低',
+                    onTap: () => Navigator.of(context).pop('usdc_arbitrum'),
+                  ),
+                  const SizedBox(height: 8),
+                  _PayMethodTile(
+                    icon: Icons.monetization_on_rounded,
+                    color: const Color(0xFF2775CA),
+                    label: 'USDC (Base)',
+                    subtitle: '手续费极低',
+                    onTap: () => Navigator.of(context).pop('usdc_base'),
+                  ),
+                ],
               ),
             ),
-            const SizedBox(height: 16),
-            Text(AuthI18n.t['selectPayMethod'] ?? '选择支付方式', style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold)),
-            const SizedBox(height: 16),
-            _PayMethodTile(
-              icon: Icons.payment_rounded,
-              color: const Color(0xFF1677FF),
-              label: AuthI18n.t['alipay'] ?? '支付宝',
-              subtitle: AuthI18n.t['recommended'] ?? '推荐',
-              onTap: () => Navigator.of(context).pop('alipay'),
-            ),
-            const SizedBox(height: 8),
-            _PayMethodTile(
-              icon: Icons.chat_rounded,
-              color: const Color(0xFF07C160),
-              label: AuthI18n.t['wechatPay'] ?? '微信支付',
-              subtitle: '',
-              onTap: () => Navigator.of(context).pop('wechat'),
-            ),
-            const SizedBox(height: 8),
-            _PayMethodTile(
-              icon: Icons.currency_bitcoin_rounded,
-              color: const Color(0xFF26A17B),
-              label: 'USDT (TRC-20)',
-              subtitle: AuthI18n.t['cryptoPay'] ?? '加密货币',
-              onTap: () => Navigator.of(context).pop('usdt'),
-            ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
