@@ -99,6 +99,8 @@ class NodeListPage extends HookConsumerWidget {
       return null;
     }, []);
 
+    final activeProfile = ref.watch(activeProfileProvider).valueOrNull;
+
     return Scaffold(
       appBar: AppBar(
         leading: IconButton(
@@ -109,6 +111,28 @@ class NodeListPage extends HookConsumerWidget {
         centerTitle: true,
         elevation: 0,
         scrolledUnderElevation: 0,
+        actions: [
+          // URL test (speed test all nodes)
+          if (isConnected)
+            IconButton(
+              icon: const Icon(Icons.flash_on_rounded, size: 22),
+              tooltip: '测速',
+              onPressed: () => ref.read(proxiesOverviewNotifierProvider.notifier).urlTest("select"),
+            ),
+          // Refresh subscription
+          if (isConnected && activeProfile != null && activeProfile is RemoteProfileEntity)
+            IconButton(
+              icon: const Icon(Icons.refresh_rounded, size: 22),
+              tooltip: '刷新订阅',
+              onPressed: () {
+                ref.read(updateProfileNotifierProvider(activeProfile.id).notifier)
+                    .updateProfile(activeProfile as RemoteProfileEntity);
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('正在刷新订阅...'), duration: Duration(seconds: 2)),
+                );
+              },
+            ),
+        ],
       ),
       body: SafeArea(
         top: false,
@@ -178,6 +202,8 @@ class NodeListTabPage extends HookConsumerWidget {
       return null;
     }, []);
 
+    final activeProfile = ref.watch(activeProfileProvider).valueOrNull;
+
     return Scaffold(
       appBar: AppBar(
         automaticallyImplyLeading: false,
@@ -185,6 +211,26 @@ class NodeListTabPage extends HookConsumerWidget {
         centerTitle: true,
         elevation: 0,
         scrolledUnderElevation: 0,
+        actions: [
+          if (isConnected)
+            IconButton(
+              icon: const Icon(Icons.flash_on_rounded, size: 22),
+              tooltip: '测速',
+              onPressed: () => ref.read(proxiesOverviewNotifierProvider.notifier).urlTest("select"),
+            ),
+          if (isConnected && activeProfile != null && activeProfile is RemoteProfileEntity)
+            IconButton(
+              icon: const Icon(Icons.refresh_rounded, size: 22),
+              tooltip: '刷新订阅',
+              onPressed: () {
+                ref.read(updateProfileNotifierProvider(activeProfile.id).notifier)
+                    .updateProfile(activeProfile as RemoteProfileEntity);
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('正在刷新订阅...'), duration: Duration(seconds: 2)),
+                );
+              },
+            ),
+        ],
       ),
       body: SafeArea(
         top: false,
