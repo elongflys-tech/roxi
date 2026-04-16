@@ -8,10 +8,10 @@ abstract class Constants {
   static const githubReleasesApiUrl = "https://api.github.com/repos/elongflys-tech/roxi/releases";
   static const githubLatestReleaseUrl = "https://dl.roxi.cc";
   static const appCastUrl = "https://raw.githubusercontent.com/elongflys-tech/roxi/main/appcast.xml";
-  static const int appVersionCode = 124; // must match pubspec.yaml build number (+124)
+  static const int appVersionCode = 125; // must match pubspec.yaml build number (+125)
   static const telegramChannelUrl = "https://t.me/Roxifree";
-  static const privacyPolicyUrl = "https://hiddify.com/privacy-policy/";
-  static const termsAndConditionsUrl = "https://hiddify.com/terms/";
+  static const privacyPolicyUrl = "https://roxi.cc/privacy.html";
+  static const termsAndConditionsUrl = "https://roxi.cc/terms.html";
   static const cfWarpPrivacyPolicy = "https://www.cloudflare.com/application/privacypolicy/";
   static const cfWarpTermsOfService = "https://www.cloudflare.com/application/terms/";
 }
