@@ -34,12 +34,15 @@ class AuthService {
   }
 
   /// Try POST request across all fallback domains. Returns first successful response.
+  /// Returns response even if status != 200 (for error handling).
+  /// Returns null only if all domains fail to connect.
   static Future<http.Response?> _postWithFallback(
     String path, {
     Map<String, String>? headers,
     String? body,
     Duration timeout = const Duration(seconds: 8),
   }) async {
+    http.Response? lastResp;
     for (int i = 0; i < _fallbackUrls.length; i++) {
       if (i > 0) await Future.delayed(Duration(milliseconds: 800 * i));
       try {
@@ -48,12 +51,15 @@ class AuthService {
           headers: headers,
           body: body,
         ).timeout(timeout);
+        lastResp = resp;
         if (resp.statusCode == 200) return resp;
+        // If 401/403, don't try other domains (auth issue, not network)
+        if (resp.statusCode == 401 || resp.statusCode == 403) return resp;
       } catch (_) {
         // Try next domain after backoff
       }
     }
-    return null;
+    return lastResp; // Return last response even if not 200
   }
 
   // In-memory cache for plans (avoid re-fetching on every sheet open)
@@ -336,21 +342,39 @@ class AuthService {
 
   Future<Map<String, dynamic>?> createOrder(int planId) async {
     try {
-      final resp = await http.post(
-        Uri.parse('$baseUrl/api/orders/'),
+      var resp = await _postWithFallback(
+        '/api/orders/',
         headers: _headers,
         body: jsonEncode({'plan_id': planId}),
+        timeout: const Duration(seconds: 15),
       );
-      if (resp.statusCode == 200) {
+      
+      // If unauthorized (401), token expired — re-register and retry once
+      if (resp != null && resp.statusCode == 401) {
+        final err = await deviceRegister();
+        if (err == null) {
+          resp = await _postWithFallback(
+            '/api/orders/',
+            headers: _headers,
+            body: jsonEncode({'plan_id': planId}),
+            timeout: const Duration(seconds: 15),
+          );
+        }
+      }
+      
+      if (resp != null && resp.statusCode == 200) {
         return jsonDecode(_body(resp));
       }
       // Return error detail from server
-      try {
-        final err = jsonDecode(_body(resp));
-        return {'error': true, 'detail': err['detail'] ?? 'HTTP ${resp.statusCode}'};
-      } catch (_) {
-        return {'error': true, 'detail': 'HTTP ${resp.statusCode}'};
+      if (resp != null) {
+        try {
+          final err = jsonDecode(_body(resp));
+          return {'error': true, 'detail': err['detail'] ?? 'HTTP ${resp.statusCode}'};
+        } catch (_) {
+          return {'error': true, 'detail': 'HTTP ${resp.statusCode}'};
+        }
       }
+      return {'error': true, 'detail': '网络连接失败，请检查网络'};
     } catch (e) {
       return {'error': true, 'detail': e.toString()};
     }
@@ -359,21 +383,39 @@ class AuthService {
   /// Create CNY order (alipay/wechat) via JLB gateway.
   Future<Map<String, dynamic>?> createCNYOrder(int planId, String channel) async {
     try {
-      final resp = await http.post(
-        Uri.parse('$baseUrl/api/pay/create'),
+      var resp = await _postWithFallback(
+        '/api/pay/create',
         headers: _headers,
         body: jsonEncode({'plan_id': planId, 'channel': channel}),
+        timeout: const Duration(seconds: 15),
       );
-      if (resp.statusCode == 200) {
+      
+      // If unauthorized (401), token expired — re-register and retry once
+      if (resp != null && resp.statusCode == 401) {
+        final err = await deviceRegister();
+        if (err == null) {
+          resp = await _postWithFallback(
+            '/api/pay/create',
+            headers: _headers,
+            body: jsonEncode({'plan_id': planId, 'channel': channel}),
+            timeout: const Duration(seconds: 15),
+          );
+        }
+      }
+      
+      if (resp != null && resp.statusCode == 200) {
         return jsonDecode(_body(resp));
       }
       // Return error detail from server
-      try {
-        final err = jsonDecode(_body(resp));
-        return {'error': true, 'detail': err['detail'] ?? 'HTTP ${resp.statusCode}'};
-      } catch (_) {
-        return {'error': true, 'detail': 'HTTP ${resp.statusCode}'};
+      if (resp != null) {
+        try {
+          final err = jsonDecode(_body(resp));
+          return {'error': true, 'detail': err['detail'] ?? 'HTTP ${resp.statusCode}'};
+        } catch (_) {
+          return {'error': true, 'detail': 'HTTP ${resp.statusCode}'};
+        }
       }
+      return {'error': true, 'detail': '网络连接失败，请检查网络'};
     } catch (e) {
       return {'error': true, 'detail': e.toString()};
     }
@@ -381,11 +423,12 @@ class AuthService {
 
   Future<Map<String, dynamic>?> getPayInfo(String orderNo) async {
     try {
-      final resp = await http.get(
-        Uri.parse('$baseUrl/api/orders/pay-info/$orderNo'),
+      final resp = await _getWithFallback(
+        '/api/orders/pay-info/$orderNo',
         headers: _headers,
+        timeout: const Duration(seconds: 10),
       );
-      if (resp.statusCode == 200) {
+      if (resp != null && resp.statusCode == 200) {
         return jsonDecode(_body(resp));
       }
     } catch (_) {}
@@ -394,11 +437,12 @@ class AuthService {
 
   Future<String?> checkOrderStatus(String orderNo) async {
     try {
-      final resp = await http.get(
-        Uri.parse('$baseUrl/api/orders/status/$orderNo'),
+      final resp = await _getWithFallback(
+        '/api/orders/status/$orderNo',
         headers: _headers,
+        timeout: const Duration(seconds: 8),
       );
-      if (resp.statusCode == 200) {
+      if (resp != null && resp.statusCode == 200) {
         final data = jsonDecode(_body(resp));
         return data['status'];
       }
@@ -432,11 +476,11 @@ class AuthService {
 
   Future<Map<String, dynamic>?> getInviteInfo() async {
     try {
-      final resp = await http.get(
-        Uri.parse('$baseUrl/api/user/invite'),
+      final resp = await _getWithFallback(
+        '/api/user/invite',
         headers: _headers,
       );
-      if (resp.statusCode == 200) {
+      if (resp != null && resp.statusCode == 200) {
         return jsonDecode(_body(resp));
       }
     } catch (_) {}
