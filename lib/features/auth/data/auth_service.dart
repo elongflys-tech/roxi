@@ -340,12 +340,12 @@ class AuthService {
     return [];
   }
 
-  Future<Map<String, dynamic>?> createOrder(int planId) async {
+  Future<Map<String, dynamic>?> createOrder(int planId, {String chain = 'trc20', String token = 'usdt'}) async {
     try {
       var resp = await _postWithFallback(
         '/api/orders/',
         headers: _headers,
-        body: jsonEncode({'plan_id': planId}),
+        body: jsonEncode({'plan_id': planId, 'chain': chain, 'token': token, 'payment_method': token}),
         timeout: const Duration(seconds: 15),
       );
       
@@ -356,7 +356,7 @@ class AuthService {
           resp = await _postWithFallback(
             '/api/orders/',
             headers: _headers,
-            body: jsonEncode({'plan_id': planId}),
+            body: jsonEncode({'plan_id': planId, 'chain': chain, 'token': token, 'payment_method': token}),
             timeout: const Duration(seconds: 15),
           );
         }
