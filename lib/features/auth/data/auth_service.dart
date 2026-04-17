@@ -450,6 +450,23 @@ class AuthService {
     return null;
   }
 
+  /// Fetch current user's order history.
+  Future<List<Map<String, dynamic>>> getMyOrders() async {
+    try {
+      final resp = await _getWithFallback(
+        '/api/user/orders',
+        headers: _headers,
+        timeout: const Duration(seconds: 10),
+      );
+      if (resp != null && resp.statusCode == 200) {
+        final data = jsonDecode(_body(resp));
+        final items = data['orders'] as List<dynamic>? ?? [];
+        return items.cast<Map<String, dynamic>>();
+      }
+    } catch (_) {}
+    return [];
+  }
+
   Future<Map<String, dynamic>?> getUserInfo() async {
     try {
       final resp = await _getWithFallback('/api/user/me', headers: _headers);
