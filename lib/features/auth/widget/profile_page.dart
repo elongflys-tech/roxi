@@ -51,7 +51,7 @@ class ProfilePage extends HookWidget {
     final tier = (userInfo.value?['tier'] as String?) ?? 'free';
     final isPaid = tier == 'vip' || tier == 'svip';
     final tierLabel = isPaid ? (tier == 'svip' ? s['svipTier']! : s['vipTier']!) : s['freeTier']!;
-    final tierColor = isPaid ? (tier == 'svip' ? Colors.amber : Colors.blue) : Colors.grey;
+    final tierColor = isPaid ? (tier == 'svip' ? const Color(0xFF7B1FA2) : const Color(0xFFD4A017)) : Colors.grey;
     final invCode = inviteInfo.value?['invite_code'] ?? '';
     final invCount = inviteInfo.value?['invited_count'] ?? 0;
     final bonusDays = inviteInfo.value?['bonus_days'] ?? 0;
@@ -64,7 +64,7 @@ class ProfilePage extends HookWidget {
         iconTheme: const IconThemeData(color: Colors.black87)),
       body: ListView(padding: const EdgeInsets.all(16), children: [
         _UserHeaderCard(hasEmail: hasEmail, email: email?.toString() ?? '',
-          deviceId: deviceId.toString(), tierLabel: tierLabel, tierColor: tierColor,
+          deviceId: deviceId.toString(), tier: tier, tierLabel: tierLabel, tierColor: tierColor,
           onTap: hasEmail ? null : () => showAuthPanel.value = !showAuthPanel.value),
         if (!hasEmail && showAuthPanel.value) ...[const SizedBox(height: 12), _AuthPanel(onSuccess: reload)],
         if (!hasEmail && !showAuthPanel.value) ...[
@@ -101,6 +101,9 @@ class ProfilePage extends HookWidget {
           style: FilledButton.styleFrom(
             padding: const EdgeInsets.symmetric(vertical: 14),
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))))),
+        const SizedBox(height: 16),
+        // Order History
+        const _OrderHistoryCard(),
         const SizedBox(height: 16),
         _buildSection(theme, s['inviteTitle']!, [
           _infoRow(s['inviteCount']!, '$invCount ${s['invitePeople']}', null),
@@ -180,23 +183,32 @@ class _UserHeaderCard extends StatelessWidget {
   final bool hasEmail;
   final String email;
   final String deviceId;
+  final String tier;
   final String tierLabel;
   final Color tierColor;
   final VoidCallback? onTap;
-  const _UserHeaderCard({required this.hasEmail, required this.email, required this.deviceId, required this.tierLabel, required this.tierColor, this.onTap});
+  const _UserHeaderCard({required this.hasEmail, required this.email, required this.deviceId, required this.tier, required this.tierLabel, required this.tierColor, this.onTap});
 
   @override
   Widget build(BuildContext context) {
     final s = AuthI18n.t;
+    final isSvip = tier == 'svip';
+    final isPaid = tierColor != Colors.grey;
+    final bgColor1 = isSvip ? const Color(0x1A9C27B0) : (isPaid ? tierColor.withOpacity(0.08) : Colors.grey.shade50);
+    final borderColor = isSvip ? const Color(0xFF9C27B0).withOpacity(0.25) : (isPaid ? tierColor.withOpacity(0.25) : Colors.grey.shade200);
+    final avatarBg = isSvip ? const Color(0xFF9C27B0).withOpacity(0.15) : (isPaid ? tierColor.withOpacity(0.15) : (hasEmail ? Colors.blue.shade100 : Colors.grey.shade200));
+    final avatarIcon = isSvip ? const Color(0xFF9C27B0).withOpacity(0.7) : (isPaid ? tierColor.withOpacity(0.7) : (hasEmail ? Colors.blue.shade700 : Colors.grey.shade500));
     return Material(color: Colors.transparent, child: InkWell(onTap: onTap, borderRadius: BorderRadius.circular(16),
       child: Container(padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
-          gradient: LinearGradient(colors: [Colors.blue.shade50, Colors.white], begin: Alignment.topLeft, end: Alignment.bottomRight),
-          borderRadius: BorderRadius.circular(16), border: Border.all(color: Colors.blue.shade100)),
+          gradient: isSvip
+              ? const LinearGradient(colors: [Color(0x1A9C27B0), Color(0x1AD4A017), Color(0x00FFFFFF)], begin: Alignment.topLeft, end: Alignment.bottomRight)
+              : LinearGradient(colors: [bgColor1, Colors.white], begin: Alignment.topLeft, end: Alignment.bottomRight),
+          borderRadius: BorderRadius.circular(16), border: Border.all(color: borderColor)),
         child: Row(children: [
-          CircleAvatar(radius: 28, backgroundColor: hasEmail ? Colors.blue.shade100 : Colors.grey.shade200,
+          CircleAvatar(radius: 28, backgroundColor: avatarBg,
             child: Icon(hasEmail ? Icons.person_rounded : Icons.phone_android_rounded, size: 28,
-              color: hasEmail ? Colors.blue.shade700 : Colors.grey.shade500)),
+              color: avatarIcon)),
           const SizedBox(width: 16),
           Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
             Text(hasEmail ? email : s['deviceUser']!,
@@ -206,8 +218,15 @@ class _UserHeaderCard extends StatelessWidget {
               style: TextStyle(fontSize: 12, color: Colors.grey.shade500)),
           ])),
           Container(padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-            decoration: BoxDecoration(color: tierColor.withOpacity(0.15), borderRadius: BorderRadius.circular(20)),
-            child: Text(tierLabel, style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: tierColor))),
+            decoration: BoxDecoration(
+              color: isSvip ? null : tierColor.withOpacity(0.15),
+              gradient: isSvip ? const LinearGradient(colors: [Color(0x269C27B0), Color(0x26D4A017)]) : null,
+              borderRadius: BorderRadius.circular(20)),
+            child: isSvip
+                ? ShaderMask(
+                    shaderCallback: (bounds) => const LinearGradient(colors: [Color(0xFF9C27B0), Color(0xFFD4A017)]).createShader(bounds),
+                    child: const Text('SVIP', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Colors.white)))
+                : Text(tierLabel, style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: tierColor))),
           if (!hasEmail) ...[const SizedBox(width: 8), Icon(Icons.arrow_forward_ios_rounded, size: 14, color: Colors.grey.shade400)],
         ]))));
   }
@@ -290,6 +309,117 @@ class _AuthPanel extends HookWidget {
       padding: const EdgeInsets.symmetric(vertical: 8), alignment: Alignment.center,
       decoration: BoxDecoration(color: active ? Colors.blue : Colors.grey.shade100, borderRadius: BorderRadius.circular(8)),
       child: Text(label, style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: active ? Colors.white : Colors.grey.shade600))));
+  }
+}
+
+class _OrderHistoryCard extends HookWidget {
+  const _OrderHistoryCard();
+
+  @override
+  Widget build(BuildContext context) {
+    final s = AuthI18n.t;
+    final orders = useState<List<Map<String, dynamic>>>([]);
+    final isLoading = useState(true);
+    final expanded = useState(false);
+
+    useEffect(() {
+      () async {
+        final prefs = await SharedPreferences.getInstance();
+        final auth = AuthService(prefs);
+        orders.value = await auth.getMyOrders();
+        isLoading.value = false;
+      }();
+      return null;
+    }, []);
+
+    final statusLabel = {
+      'paid': '已支付',
+      'pending': '待支付',
+      'cancelled': '已取消',
+      'expired': '已过期',
+    };
+    final statusColor = {
+      'paid': Colors.green,
+      'pending': Colors.orange,
+      'cancelled': Colors.grey,
+      'expired': Colors.red,
+    };
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.grey.shade50,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.grey.shade200),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          GestureDetector(
+            onTap: () => expanded.value = !expanded.value,
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(s['orderHistory'] ?? '订单记录',
+                    style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: Colors.grey.shade700)),
+                Row(children: [
+                  if (!isLoading.value)
+                    Text('${orders.value.length}笔', style: TextStyle(fontSize: 12, color: Colors.grey.shade500)),
+                  const SizedBox(width: 4),
+                  Icon(expanded.value ? Icons.expand_less : Icons.expand_more, color: Colors.grey.shade500),
+                ]),
+              ],
+            ),
+          ),
+          if (expanded.value) ...[
+            const SizedBox(height: 12),
+            if (isLoading.value)
+              const Center(child: SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2)))
+            else if (orders.value.isEmpty)
+              Text('暂无订单', style: TextStyle(fontSize: 13, color: Colors.grey.shade500))
+            else
+              ...orders.value.map((o) {
+                final status = o['status'] as String? ?? 'pending';
+                final amount = o['amount_cny'] != null
+                    ? '¥${o['amount_cny']}'
+                    : (o['pay_amount_usdt'] != null ? '\$${(o['pay_amount_usdt'] as num).toStringAsFixed(2)}' : '\$${(o['amount_usdt'] as num).toStringAsFixed(2)}');
+                final created = o['created_at'] as String? ?? '';
+                final dateStr = created.length >= 10 ? created.substring(0, 10) : created;
+                return Padding(
+                  padding: const EdgeInsets.only(bottom: 8),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(o['plan_name'] ?? '', style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500)),
+                            const SizedBox(height: 2),
+                            Text(dateStr, style: TextStyle(fontSize: 11, color: Colors.grey.shade500)),
+                          ],
+                        ),
+                      ),
+                      Text(amount, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+                      const SizedBox(width: 8),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: (statusColor[status] ?? Colors.grey).withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                        child: Text(
+                          statusLabel[status] ?? status,
+                          style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: statusColor[status] ?? Colors.grey),
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+              }),
+          ],
+        ],
+      ),
+    );
   }
 }
 
