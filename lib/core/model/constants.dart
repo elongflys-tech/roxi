@@ -8,7 +8,7 @@ abstract class Constants {
   static const githubReleasesApiUrl = "https://api.github.com/repos/elongflys-tech/roxi/releases";
   static const githubLatestReleaseUrl = "https://dl.roxi.cc";
   static const appCastUrl = "https://raw.githubusercontent.com/elongflys-tech/roxi/main/appcast.xml";
-  static const int appVersionCode = 125; // must match pubspec.yaml build number (+125)
+  static const int appVersionCode = 126; // must match pubspec.yaml build number (+126)
   static const telegramChannelUrl = "https://t.me/Roxifree";
   static const privacyPolicyUrl = "https://roxi.cc/privacy.html";
   static const termsAndConditionsUrl = "https://roxi.cc/terms.html";
