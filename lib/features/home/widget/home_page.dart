@@ -139,6 +139,28 @@ class HomePage extends HookConsumerWidget {
       return null;
     }, []);
 
+    // Listen for payment success — refresh user info immediately
+    useEffect(() {
+      void onPayment() async {
+        try {
+          final prefs = await SharedPreferences.getInstance();
+          final auth = AuthService(prefs);
+          final info = await auth.getUserInfo();
+          if (info != null) {
+            final tier = info['tier'] as String? ?? 'free';
+            userTier.value = tier;
+            isPaidUser.value = tier == 'vip' || tier == 'svip';
+            final ed = info['expire_date'];
+            if (ed != null && ed.toString().isNotEmpty) {
+              expireDate.value = ed.toString();
+            }
+          }
+        } catch (_) {}
+      }
+      PaymentEvents.addListener(onPayment);
+      return () => PaymentEvents.removeListener(onPayment);
+    }, []);
+
     // Connection status for UI
     final connectionStatus = ref.watch(
       connectionNotifierProvider.select((v) => v.valueOrNull ?? const Disconnected()),
@@ -213,7 +235,7 @@ class HomePage extends HookConsumerWidget {
       if (isPaidUser.value && expireDate.value != null) {
         final ed = expireDate.value!;
         final tierLabel = userTier.value == 'svip' ? 'SVIP' : 'VIP';
-        final tierColor = userTier.value == 'svip' ? Colors.amber.shade700 : Colors.blue;
+        final tierColor = userTier.value == 'svip' ? const Color(0xFF7B1FA2) : const Color(0xFFD4A017);
         try {
           final expDt = DateTime.parse(ed);
           final daysLeft = expDt.difference(DateTime.now()).inDays;
@@ -240,14 +262,37 @@ class HomePage extends HookConsumerWidget {
             );
           }
         } catch (_) {}
-        // More than 7 days left — show tier badge
+        // More than 7 days left — show tier badge with gradient for SVIP
+        if (userTier.value == 'svip') {
+          return Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+            decoration: BoxDecoration(
+              gradient: const LinearGradient(
+                colors: [Color(0x1A9C27B0), Color(0x1AD4A017)],
+                begin: Alignment.centerLeft,
+                end: Alignment.centerRight,
+              ),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: const Color(0xFF9C27B0).withOpacity(0.3), width: 0.5),
+            ),
+            child: ShaderMask(
+              shaderCallback: (bounds) => const LinearGradient(
+                colors: [Color(0xFF9C27B0), Color(0xFFD4A017)],
+              ).createShader(bounds),
+              child: const Text(
+                'Roxi SVIP',
+                style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Colors.white),
+              ),
+            ),
+          );
+        }
         return Container(
           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
           decoration: BoxDecoration(
-            color: userTier.value == 'svip' ? Colors.amber.shade50 : Colors.blue.shade50,
+            color: const Color(0xFFFFF8E1),
             borderRadius: BorderRadius.circular(12),
             border: Border.all(
-              color: userTier.value == 'svip' ? Colors.amber.shade200 : Colors.blue.shade200,
+              color: const Color(0xFFD4A017).withOpacity(0.3),
               width: 0.5,
             ),
           ),
