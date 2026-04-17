@@ -3,20 +3,20 @@
     <channel>
         <title>Release</title>
         <item>
-            <title>Version 1.2.7</title>
-            <description>彻底修复支付灰屏卡死；CNY支付移动端不再自动打开浏览器</description>
+            <title>Version 1.2.8</title>
+            <description>彻底修复支付灰屏卡死；CNY移动端自动跳转支付；桌面端显示二维码</description>
             <pubDate>Thu, 17 Apr 2026 00:00:00 +0000</pubDate>
             <enclosure
                 url="https://dl.roxi.cc/roxi-latest.apk"
-                sparkle:version="1.2.7" sparkle:os="android" />
+                sparkle:version="1.2.8" sparkle:os="android" />
         </item>
         <item>
-            <title>Version 1.2.7</title>
-            <description>彻底修复支付灰屏卡死；CNY支付移动端不再自动打开浏览器</description>
+            <title>Version 1.2.8</title>
+            <description>彻底修复支付灰屏卡死；CNY移动端自动跳转支付；桌面端显示二维码</description>
             <pubDate>Thu, 17 Apr 2026 00:00:00 +0000</pubDate>
             <enclosure
                 url="https://dl.roxi.cc/roxi-latest.zip"
-                sparkle:version="1.2.7" sparkle:os="windows" />
+                sparkle:version="1.2.8" sparkle:os="windows" />
         </item>
     </channel>
 </rss>
