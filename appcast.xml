@@ -3,20 +3,20 @@
     <channel>
         <title>Release</title>
         <item>
-            <title>Version 1.2.5</title>
-            <description>新增USDT/USDC多链支付(BSC/Polygon/Arbitrum/Base)；节点列表页加刷新和测速按钮；修复支付选择器小屏溢出；套餐加载失败显示重试</description>
+            <title>Version 1.2.6</title>
+            <description>修复支付loading灰屏卡死；修复套餐选中状态不跟随；轮询健壮性优化；CNY支付自动跳转</description>
             <pubDate>Thu, 17 Apr 2026 00:00:00 +0000</pubDate>
             <enclosure
                 url="https://dl.roxi.cc/roxi-latest.apk"
-                sparkle:version="1.2.5" sparkle:os="android" />
+                sparkle:version="1.2.6" sparkle:os="android" />
         </item>
         <item>
-            <title>Version 1.2.5</title>
-            <description>新增USDT/USDC多链支付(BSC/Polygon/Arbitrum/Base)；节点列表页加刷新和测速按钮；修复支付选择器小屏溢出；套餐加载失败显示重试</description>
+            <title>Version 1.2.6</title>
+            <description>修复支付loading灰屏卡死；修复套餐选中状态不跟随；轮询健壮性优化；CNY支付自动跳转</description>
             <pubDate>Thu, 17 Apr 2026 00:00:00 +0000</pubDate>
             <enclosure
                 url="https://dl.roxi.cc/roxi-latest.zip"
-                sparkle:version="1.2.5" sparkle:os="windows" />
+                sparkle:version="1.2.6" sparkle:os="windows" />
         </item>
     </channel>
 </rss>
