@@ -201,18 +201,25 @@ class _PlansSheet extends HookWidget {
     final auth = AuthService(prefs);
 
     if (!context.mounted) return;
-    var loadingShown = true;
-    showDialog(
+
+    // Use a dedicated GlobalKey navigator to ensure we close the right dialog
+    final loadingRoute = DialogRoute<void>(
       context: context,
       barrierDismissible: false,
-      useRootNavigator: false,
       builder: (_) => const Center(child: CircularProgressIndicator()),
     );
+    Navigator.of(context, rootNavigator: true).push(loadingRoute);
+
+    void dismissLoading() {
+      if (loadingRoute.isActive) {
+        Navigator.of(context, rootNavigator: true).removeRoute(loadingRoute);
+      }
+    }
 
     try {
       final order = await auth.createOrder(plan['id'], chain: chain, token: token).timeout(const Duration(seconds: 15));
-      if (!context.mounted) { loadingShown = false; return; }
-      if (loadingShown) { Navigator.of(context).pop(); loadingShown = false; }
+      if (!context.mounted) return;
+      dismissLoading();
 
       if (order == null || order['error'] == true) {
         final detail = order?['detail'] ?? s['orderFailed']!;
@@ -236,7 +243,6 @@ class _PlansSheet extends HookWidget {
       await showDialog<bool>(
         context: context,
         barrierDismissible: true,
-        useRootNavigator: false,
         builder: (_) => _PaymentDialog(
           payInfo: info,
           orderNo: order['order_no'] as String,
@@ -245,10 +251,7 @@ class _PlansSheet extends HookWidget {
       );
       // Don't pop anything after payment dialog closes — user stays on plans sheet
     } catch (_) {
-      if (context.mounted && loadingShown) {
-        Navigator.of(context).pop();
-        loadingShown = false;
-      }
+      dismissLoading();
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(s['orderFailed']!)));
       }
@@ -262,18 +265,23 @@ class _PlansSheet extends HookWidget {
 
     if (!context.mounted) return;
 
-    var loadingShown = true;
-    showDialog(
+    final loadingRoute = DialogRoute<void>(
       context: context,
       barrierDismissible: false,
-      useRootNavigator: false,
       builder: (_) => const Center(child: CircularProgressIndicator()),
     );
+    Navigator.of(context, rootNavigator: true).push(loadingRoute);
+
+    void dismissLoading() {
+      if (loadingRoute.isActive) {
+        Navigator.of(context, rootNavigator: true).removeRoute(loadingRoute);
+      }
+    }
 
     try {
       final result = await auth.createCNYOrder(plan['id'], channel).timeout(const Duration(seconds: 15));
-      if (!context.mounted) { loadingShown = false; return; }
-      if (loadingShown) { Navigator.of(context).pop(); loadingShown = false; }
+      if (!context.mounted) return;
+      dismissLoading();
 
       if (result == null || result['error'] == true) {
         final detail = result?['detail'] ?? s['orderFailed']!;
@@ -301,7 +309,6 @@ class _PlansSheet extends HookWidget {
       await showDialog<bool>(
         context: context,
         barrierDismissible: true,
-        useRootNavigator: false,
         builder: (_) => _CNYPaymentDialog(
           payUrl: payUrl,
           orderNo: orderNo,
@@ -312,10 +319,7 @@ class _PlansSheet extends HookWidget {
       );
       // Don't pop anything after payment dialog closes — user stays on plans sheet
     } catch (_) {
-      if (context.mounted && loadingShown) {
-        Navigator.of(context).pop();
-        loadingShown = false;
-      }
+      dismissLoading();
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text(s['orderFailed']!)),
@@ -969,15 +973,15 @@ class _CNYPaymentDialog extends HookWidget {
       return () => timer?.cancel();
     }, [orderNo]);
 
-    // Auto open pay URL on desktop only (mobile users scan QR instead)
+    // Detect platform
+    final isDesktop = Theme.of(context).platform == TargetPlatform.windows ||
+        Theme.of(context).platform == TargetPlatform.macOS ||
+        Theme.of(context).platform == TargetPlatform.linux;
+
+    // Mobile: auto open pay URL in browser/app; Desktop: show QR for scanning
     useEffect(() {
-      if (payUrl.isNotEmpty) {
-        final isDesktop = Theme.of(context).platform == TargetPlatform.windows ||
-            Theme.of(context).platform == TargetPlatform.macOS ||
-            Theme.of(context).platform == TargetPlatform.linux;
-        if (isDesktop) {
-          _launchUrl(payUrl);
-        }
+      if (payUrl.isNotEmpty && !isDesktop) {
+        _launchUrl(payUrl);
       }
       return null;
     }, []);
@@ -1030,8 +1034,8 @@ class _CNYPaymentDialog extends HookWidget {
               ),
             ),
             const SizedBox(height: 16),
-            // QR code for pay URL
-            if (payUrl.isNotEmpty)
+            // Desktop: show QR code for scanning with phone
+            if (isDesktop && payUrl.isNotEmpty) ...[
               Container(
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(12)),
@@ -1044,8 +1048,26 @@ class _CNYPaymentDialog extends HookWidget {
                   dataModuleStyle: QrDataModuleStyle(dataModuleShape: QrDataModuleShape.square, color: channelColor),
                 ),
               ),
-            const SizedBox(height: 8),
-            Text(AuthI18n.t['scanToPay'] ?? '${channelLabel}扫码支付', style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
+              const SizedBox(height: 8),
+              Text(AuthI18n.t['scanToPay'] ?? '${channelLabel}扫码支付', style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
+            ],
+            // Mobile: show "opened in browser" hint + re-open button
+            if (!isDesktop) ...[
+              Icon(Icons.open_in_browser_rounded, size: 48, color: channelColor),
+              const SizedBox(height: 8),
+              Text('已跳转到${channelLabel}', style: theme.textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600)),
+              const SizedBox(height: 4),
+              Text('请在打开的页面完成支付', style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
+              const SizedBox(height: 12),
+              OutlinedButton.icon(
+                onPressed: () => _launchUrl(payUrl),
+                icon: const Icon(Icons.refresh_rounded, size: 16),
+                label: Text('重新打开支付页面'),
+                style: OutlinedButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                ),
+              ),
+            ],
             const SizedBox(height: 12),
             // Copy link button
             OutlinedButton.icon(
