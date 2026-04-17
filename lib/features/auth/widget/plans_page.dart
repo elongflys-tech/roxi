@@ -6,6 +6,7 @@ import 'package:hiddify/features/auth/data/auth_i18n.dart';
 import 'package:hiddify/features/auth/data/auth_service.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 /// Show plans as a modal bottom sheet.
 Future<void> showPlansSheet(BuildContext context) {
@@ -30,6 +31,7 @@ class _PlansSheet extends HookWidget {
     final loadError = useState(false);
     final remainingSec = useState<int?>(null);
     final discountLabel = useState<String>('');
+    final selectedIndex = useState<int?>(null);
 
     Future<void> loadPlans() async {
       isLoading.value = true;
@@ -43,6 +45,9 @@ class _PlansSheet extends HookWidget {
           final sec = fetched[0]['discount_remaining_sec'] as int?;
           if (sec != null && sec > 0) remainingSec.value = sec;
           discountLabel.value = (fetched[0]['discount_label'] as String?) ?? '';
+          // Default select the recommended plan (annual VIP), or first
+          final recIdx = fetched.indexWhere((p) => (p['tier'] ?? 'vip') == 'vip' && ((p['days'] as num?)?.toInt() ?? 0) >= 365);
+          selectedIndex.value = recIdx >= 0 ? recIdx : 0;
         }
         if (fetched.isEmpty) loadError.value = true;
       } catch (_) {
@@ -149,7 +154,12 @@ class _PlansSheet extends HookWidget {
                 itemCount: plans.value.length,
                 itemBuilder: (ctx, i) => _PlanCard(
                   plan: plans.value[i],
-                  onBuy: () => _handleBuy(context, plans.value[i]),
+                  isSelected: selectedIndex.value == i,
+                  onTap: () => selectedIndex.value = i,
+                  onBuy: () {
+                    selectedIndex.value = i;
+                    _handleBuy(context, plans.value[i]);
+                  },
                   discountActive: remainingSec.value != null && remainingSec.value! > 0,
                 ),
               ),
@@ -168,16 +178,16 @@ class _PlansSheet extends HookWidget {
     );
     if (method == null || !context.mounted) return;
 
-    if (method!.startsWith('usdt_') || method == 'usdt' || method!.startsWith('usdc_')) {
+    if (method.startsWith('usdt_') || method == 'usdt' || method.startsWith('usdc_')) {
       // Parse token and chain from method string
       // Format: "usdt_bsc", "usdc_polygon", "usdt" (trc20 default)
-      final isUsdc = method!.startsWith('usdc');
+      final isUsdc = method.startsWith('usdc');
       final token = isUsdc ? 'usdc' : 'usdt';
       String chain;
       if (method == 'usdt') {
         chain = 'trc20';
       } else {
-        chain = method!.split('_').last; // "bsc", "polygon", "arbitrum", "base"
+        chain = method.split('_').last; // "bsc", "polygon", "arbitrum", "base"
       }
       await _handleCryptoBuy(context, plan, chain: chain, token: token);
     } else {
@@ -191,6 +201,7 @@ class _PlansSheet extends HookWidget {
     final auth = AuthService(prefs);
 
     if (!context.mounted) return;
+    var loadingShown = true;
     showDialog(
       context: context,
       barrierDismissible: false,
@@ -199,21 +210,29 @@ class _PlansSheet extends HookWidget {
 
     try {
       final order = await auth.createOrder(plan['id'], chain: chain, token: token).timeout(const Duration(seconds: 15));
-      if (!context.mounted) return;
-      Navigator.of(context).pop(); // dismiss loading
+      if (!context.mounted) { loadingShown = false; return; }
+      if (loadingShown) { Navigator.of(context).pop(); loadingShown = false; }
 
       if (order == null || order['error'] == true) {
         final detail = order?['detail'] ?? s['orderFailed']!;
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('$detail')),
-        );
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$detail')));
+        }
         return;
       }
 
       final info = await auth.getPayInfo(order['order_no']).timeout(const Duration(seconds: 10));
-      if (info == null || !context.mounted) return;
+      if (!context.mounted) return;
+      if (info == null) {
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(s['orderFailed'] ?? '获取支付信息失败，请重试')),
+          );
+        }
+        return;
+      }
 
-      final paid = await showDialog<bool>(
+      await showDialog<bool>(
         context: context,
         barrierDismissible: true,
         builder: (_) => _PaymentDialog(
@@ -222,16 +241,14 @@ class _PlansSheet extends HookWidget {
           planName: plan['name'] ?? '',
         ),
       );
-
-      if (paid == true && context.mounted) {
-        Navigator.of(context).pop();
-      }
+      // Don't pop anything after payment dialog closes — user stays on plans sheet
     } catch (_) {
+      if (context.mounted && loadingShown) {
+        Navigator.of(context).pop();
+        loadingShown = false;
+      }
       if (context.mounted) {
-        Navigator.of(context).pop(); // dismiss loading
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(s['orderFailed']!)),
-        );
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(s['orderFailed']!)));
       }
     }
   }
@@ -243,6 +260,7 @@ class _PlansSheet extends HookWidget {
 
     if (!context.mounted) return;
 
+    var loadingShown = true;
     showDialog(
       context: context,
       barrierDismissible: false,
@@ -251,14 +269,16 @@ class _PlansSheet extends HookWidget {
 
     try {
       final result = await auth.createCNYOrder(plan['id'], channel).timeout(const Duration(seconds: 15));
-      if (!context.mounted) return;
-      Navigator.of(context).pop(); // dismiss loading
+      if (!context.mounted) { loadingShown = false; return; }
+      if (loadingShown) { Navigator.of(context).pop(); loadingShown = false; }
 
       if (result == null || result['error'] == true) {
         final detail = result?['detail'] ?? s['orderFailed']!;
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('$detail')),
-        );
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('$detail')),
+          );
+        }
         return;
       }
 
@@ -266,14 +286,16 @@ class _PlansSheet extends HookWidget {
       final orderNo = result['order_no'] as String? ?? '';
 
       if (payUrl.isEmpty) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(s['payLinkFailed'] ?? '获取支付链接失败')),
-        );
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(s['payLinkFailed'] ?? '获取支付链接失败')),
+          );
+        }
         return;
       }
 
       // Show CNY payment dialog with webview-like pay URL
-      final paid = await showDialog<bool>(
+      await showDialog<bool>(
         context: context,
         barrierDismissible: true,
         builder: (_) => _CNYPaymentDialog(
@@ -284,13 +306,13 @@ class _PlansSheet extends HookWidget {
           amount: (result['amount_cny'] as num?)?.toDouble() ?? 0,
         ),
       );
-
-      if (paid == true && context.mounted) {
-        Navigator.of(context).pop();
-      }
+      // Don't pop anything after payment dialog closes — user stays on plans sheet
     } catch (_) {
+      if (context.mounted && loadingShown) {
+        Navigator.of(context).pop();
+        loadingShown = false;
+      }
       if (context.mounted) {
-        Navigator.of(context).pop(); // dismiss loading
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text(s['orderFailed']!)),
         );
@@ -369,9 +391,11 @@ class _CountdownBanner extends StatelessWidget {
 class _PlanCard extends StatelessWidget {
   final Map<String, dynamic> plan;
   final VoidCallback onBuy;
+  final VoidCallback? onTap;
   final bool discountActive;
+  final bool isSelected;
 
-  const _PlanCard({required this.plan, required this.onBuy, this.discountActive = false});
+  const _PlanCard({required this.plan, required this.onBuy, this.onTap, this.discountActive = false, this.isSelected = false});
 
   @override
   Widget build(BuildContext context) {
@@ -396,7 +420,7 @@ class _PlanCard extends StatelessWidget {
       margin: const EdgeInsets.only(bottom: 6),
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(12),
-        side: isRecommended
+        side: isSelected
             ? BorderSide(color: theme.colorScheme.primary, width: 1.5)
             : isVip
                 ? BorderSide.none
@@ -404,7 +428,10 @@ class _PlanCard extends StatelessWidget {
       ),
       child: InkWell(
         borderRadius: BorderRadius.circular(12),
-        onTap: onBuy,
+        onTap: () {
+          onTap?.call();
+          onBuy();
+        },
         child: Stack(
           children: [
           Padding(
@@ -544,21 +571,33 @@ class _PaymentDialog extends HookWidget {
         : chain == 'base' ? 'Base'
         : 'TRC-20';
 
-    // Poll order status
+    // Poll order status (with concurrency guard & 30-min timeout)
     useEffect(() {
+      var polling = false;
+      var pollCount = 0;
+      const maxPolls = 180; // 180 × 10s = 30 min
       Timer? timer;
       timer = Timer.periodic(const Duration(seconds: 10), (_) async {
-        if (isPaid.value) { timer?.cancel(); return; }
-        isChecking.value = true;
-        final prefs = await SharedPreferences.getInstance();
-        final auth = AuthService(prefs);
-        final status = await auth.checkOrderStatus(orderNo);
-        isChecking.value = false;
-        if (status == 'paid') {
-          isPaid.value = true;
-          timer?.cancel();
-          await Future.delayed(const Duration(seconds: 1));
-          if (context.mounted) Navigator.of(context).pop(true);
+        if (isPaid.value || polling) return;
+        pollCount++;
+        if (pollCount > maxPolls) { timer?.cancel(); return; }
+        polling = true;
+        try {
+          isChecking.value = true;
+          final prefs = await SharedPreferences.getInstance();
+          final auth = AuthService(prefs);
+          final status = await auth.checkOrderStatus(orderNo);
+          if (status == 'paid') {
+            isPaid.value = true;
+            timer?.cancel();
+            await Future.delayed(const Duration(seconds: 1));
+            if (context.mounted) Navigator.of(context).pop(true);
+          }
+        } catch (_) {
+          // Network error — will retry next tick
+        } finally {
+          isChecking.value = false;
+          polling = false;
         }
       });
       return () => timer?.cancel();
@@ -894,21 +933,33 @@ class _CNYPaymentDialog extends HookWidget {
     final channelLabel = channel == 'alipay' ? '支付宝' : '微信支付';
     final channelColor = channel == 'alipay' ? const Color(0xFF1677FF) : const Color(0xFF07C160);
 
-    // Poll order status every 5s
+    // Poll order status every 5s (with concurrency guard & 30-min timeout)
     useEffect(() {
+      var polling = false;
+      var pollCount = 0;
+      const maxPolls = 360; // 360 × 5s = 30 min
       Timer? timer;
       timer = Timer.periodic(const Duration(seconds: 5), (_) async {
-        if (isPaid.value) { timer?.cancel(); return; }
-        isChecking.value = true;
-        final prefs = await SharedPreferences.getInstance();
-        final auth = AuthService(prefs);
-        final status = await auth.checkOrderStatus(orderNo);
-        isChecking.value = false;
-        if (status == 'paid') {
-          isPaid.value = true;
-          timer?.cancel();
-          await Future.delayed(const Duration(seconds: 1));
-          if (context.mounted) Navigator.of(context).pop(true);
+        if (isPaid.value || polling) return;
+        pollCount++;
+        if (pollCount > maxPolls) { timer?.cancel(); return; }
+        polling = true;
+        try {
+          isChecking.value = true;
+          final prefs = await SharedPreferences.getInstance();
+          final auth = AuthService(prefs);
+          final status = await auth.checkOrderStatus(orderNo);
+          if (status == 'paid') {
+            isPaid.value = true;
+            timer?.cancel();
+            await Future.delayed(const Duration(seconds: 1));
+            if (context.mounted) Navigator.of(context).pop(true);
+          }
+        } catch (_) {
+          // Network error — will retry next tick
+        } finally {
+          isChecking.value = false;
+          polling = false;
         }
       });
       return () => timer?.cancel();
@@ -1043,8 +1094,7 @@ class _CNYPaymentDialog extends HookWidget {
   Future<void> _launchUrl(String url) async {
     try {
       final uri = Uri.parse(url);
-      // Use url_launcher if available, otherwise just copy
-      // For now we show QR code which is the primary flow
+      await launchUrl(uri, mode: LaunchMode.externalApplication);
     } catch (_) {}
   }
 }
