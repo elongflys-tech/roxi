@@ -8,6 +8,16 @@ import 'package:qr_flutter/qr_flutter.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+/// Global event bus for payment success — listeners refresh user info.
+class PaymentEvents {
+  static final List<VoidCallback> _listeners = [];
+  static void addListener(VoidCallback cb) => _listeners.add(cb);
+  static void removeListener(VoidCallback cb) => _listeners.remove(cb);
+  static void notifySuccess() {
+    for (final cb in List.of(_listeners)) { cb(); }
+  }
+}
+
 /// Show plans as a modal bottom sheet.
 Future<void> showPlansSheet(BuildContext context) {
   return showModalBottomSheet(
@@ -171,6 +181,68 @@ class _PlansSheet extends HookWidget {
 
   Future<void> _handleBuy(BuildContext context, Map<String, dynamic> plan) async {
     final s = AuthI18n.t;
+
+    // Check if user has an active subscription — warn before purchasing
+    final prefs = await SharedPreferences.getInstance();
+    final auth = AuthService(prefs);
+    final userInfo = await auth.getUserInfo();
+    if (userInfo != null && context.mounted) {
+      final currentTier = (userInfo['tier'] as String?) ?? 'free';
+      final expStr = userInfo['expire_date']?.toString();
+      final isActive = (currentTier == 'vip' || currentTier == 'svip') &&
+          expStr != null && expStr.isNotEmpty &&
+          DateTime.tryParse(expStr)?.isAfter(DateTime.now()) == true;
+
+      if (isActive) {
+        final planTier = (plan['tier'] as String?) ?? 'vip';
+        final currentLabel = currentTier == 'svip' ? 'SVIP' : 'VIP';
+        final newLabel = planTier == 'svip' ? 'SVIP' : 'VIP';
+        final expShort = expStr!.length >= 10 ? expStr.substring(0, 10) : expStr;
+
+        // Build warning message based on tier change
+        String msg;
+        String title;
+        if (currentTier == 'svip' && planTier == 'vip') {
+          // Downgrade purchase
+          title = '⚠️ 降级购买提醒';
+          msg = '您当前是 $currentLabel 会员（到期：$expShort）\n\n'
+              '购买 $newLabel 套餐后：\n'
+              '• $currentLabel 到期前继续享受 $currentLabel 权益\n'
+              '• $currentLabel 到期后自动切换为 $newLabel\n'
+              '• 新购天数叠加到总到期时间上';
+        } else if (currentTier == planTier) {
+          // Same tier renewal
+          title = '续费确认';
+          msg = '您当前是 $currentLabel 会员（到期：$expShort）\n\n'
+              '新购天数将叠加到现有到期时间上。';
+        } else {
+          // Upgrade purchase
+          title = '升级确认';
+          msg = '您当前是 $currentLabel 会员（到期：$expShort）\n\n'
+              '升级为 $newLabel 后立即生效，剩余 $currentLabel 天数将按价格比例折算为 $newLabel 天数。';
+        }
+
+        final confirmed = await showDialog<bool>(
+          context: context,
+          builder: (ctx) => AlertDialog(
+            title: Text(title),
+            content: Text(msg),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(ctx).pop(false),
+                child: Text(s['cancel'] ?? '取消'),
+              ),
+              FilledButton(
+                onPressed: () => Navigator.of(ctx).pop(true),
+                child: const Text('继续购买'),
+              ),
+            ],
+          ),
+        );
+        if (confirmed != true || !context.mounted) return;
+      }
+    }
+
     // Show payment method picker
     final method = await showModalBottomSheet<String>(
       context: context,
@@ -240,7 +312,7 @@ class _PlansSheet extends HookWidget {
         return;
       }
 
-      await showDialog<bool>(
+      final paid = await showDialog<bool>(
         context: context,
         barrierDismissible: true,
         builder: (_) => _PaymentDialog(
@@ -249,7 +321,12 @@ class _PlansSheet extends HookWidget {
           planName: plan['name'] ?? '',
         ),
       );
-      // Don't pop anything after payment dialog closes — user stays on plans sheet
+      // Always refresh user info after payment dialog closes
+      // (user may have paid after manually closing, or polling detected it)
+      auth.getUserInfo();
+      if (paid == true) {
+        PaymentEvents.notifySuccess();
+      }
     } catch (_) {
       dismissLoading();
       if (context.mounted) {
@@ -306,7 +383,7 @@ class _PlansSheet extends HookWidget {
       }
 
       // Show CNY payment dialog with webview-like pay URL
-      await showDialog<bool>(
+      final paid = await showDialog<bool>(
         context: context,
         barrierDismissible: true,
         builder: (_) => _CNYPaymentDialog(
@@ -317,7 +394,11 @@ class _PlansSheet extends HookWidget {
           amount: (result['amount_cny'] as num?)?.toDouble() ?? 0,
         ),
       );
-      // Don't pop anything after payment dialog closes — user stays on plans sheet
+      // Always refresh user info after payment dialog closes
+      auth.getUserInfo();
+      if (paid == true) {
+        PaymentEvents.notifySuccess();
+      }
     } catch (_) {
       dismissLoading();
       if (context.mounted) {
