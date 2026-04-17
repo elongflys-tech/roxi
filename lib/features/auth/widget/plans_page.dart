@@ -205,6 +205,7 @@ class _PlansSheet extends HookWidget {
     showDialog(
       context: context,
       barrierDismissible: false,
+      useRootNavigator: false,
       builder: (_) => const Center(child: CircularProgressIndicator()),
     );
 
@@ -235,6 +236,7 @@ class _PlansSheet extends HookWidget {
       await showDialog<bool>(
         context: context,
         barrierDismissible: true,
+        useRootNavigator: false,
         builder: (_) => _PaymentDialog(
           payInfo: info,
           orderNo: order['order_no'] as String,
@@ -264,6 +266,7 @@ class _PlansSheet extends HookWidget {
     showDialog(
       context: context,
       barrierDismissible: false,
+      useRootNavigator: false,
       builder: (_) => const Center(child: CircularProgressIndicator()),
     );
 
@@ -298,6 +301,7 @@ class _PlansSheet extends HookWidget {
       await showDialog<bool>(
         context: context,
         barrierDismissible: true,
+        useRootNavigator: false,
         builder: (_) => _CNYPaymentDialog(
           payUrl: payUrl,
           orderNo: orderNo,
@@ -965,10 +969,15 @@ class _CNYPaymentDialog extends HookWidget {
       return () => timer?.cancel();
     }, [orderNo]);
 
-    // Auto open pay URL
+    // Auto open pay URL on desktop only (mobile users scan QR instead)
     useEffect(() {
       if (payUrl.isNotEmpty) {
-        _launchUrl(payUrl);
+        final isDesktop = Theme.of(context).platform == TargetPlatform.windows ||
+            Theme.of(context).platform == TargetPlatform.macOS ||
+            Theme.of(context).platform == TargetPlatform.linux;
+        if (isDesktop) {
+          _launchUrl(payUrl);
+        }
       }
       return null;
     }, []);
