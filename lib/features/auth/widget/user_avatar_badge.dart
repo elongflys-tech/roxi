@@ -35,29 +35,27 @@ class UserAvatarBadge extends HookWidget {
             loading.value = false;
             return;
           }
-          // Check user status
-          final trial = await auth.getTrialStatus();
-          if (trial != null) {
-            final status = trial['status'] as String? ?? 'free';
-            if (status == 'free') {
-              tier.value = 'free';
-              loading.value = false;
-              return;
-            }
-            if (status == 'paid') {
-              // Determine VIP vs SVIP from user info
-              final user = await auth.getUserInfo();
-              final userTier = (user?['tier'] as String? ?? 'vip').toLowerCase();
-              if (userTier == 'svip') {
+          // Use getUserInfo which returns the authoritative 'tier' field directly
+          final user = await auth.getUserInfo();
+          if (user != null) {
+            final userTier = (user['tier'] as String? ?? 'free').toLowerCase();
+            if (userTier == 'svip') {
+              final expStr = user['expire_date']?.toString();
+              if (expStr != null && DateTime.tryParse(expStr)?.isBefore(DateTime.now()) == true) {
+                tier.value = 'expired';
+              } else {
                 tier.value = 'svip';
+              }
+            } else if (userTier == 'vip') {
+              final expStr = user['expire_date']?.toString();
+              if (expStr != null && DateTime.tryParse(expStr)?.isBefore(DateTime.now()) == true) {
+                tier.value = 'expired';
               } else {
                 tier.value = 'vip';
               }
-              loading.value = false;
-              return;
+            } else {
+              tier.value = 'free';
             }
-            // expired
-            tier.value = 'expired';
           } else {
             tier.value = 'free';
           }
