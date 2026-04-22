@@ -252,12 +252,12 @@ class _PlansSheet extends HookWidget {
 
     if (method.startsWith('usdt_') || method == 'usdt' || method.startsWith('usdc_')) {
       // Parse token and chain from method string
-      // Format: "usdt_bsc", "usdc_polygon", "usdt" (trc20 default)
+      // Format: "usdt_bsc", "usdc_polygon"
       final isUsdc = method.startsWith('usdc');
       final token = isUsdc ? 'usdc' : 'usdt';
       String chain;
       if (method == 'usdt') {
-        chain = 'trc20';
+        chain = 'bsc'; // legacy fallback
       } else {
         chain = method.split('_').last; // "bsc", "polygon", "arbitrum", "base"
       }
@@ -658,7 +658,7 @@ class _PaymentDialog extends HookWidget {
         : chain == 'polygon' ? 'Polygon'
         : chain == 'arbitrum' ? 'Arbitrum'
         : chain == 'base' ? 'Base'
-        : 'TRC-20';
+        : chain.toUpperCase();
 
     // Poll order status (with concurrency guard & 30-min timeout)
     useEffect(() {
@@ -871,34 +871,10 @@ class _PayMethodPicker extends StatelessWidget {
                   const SizedBox(height: 8),
                   _PayMethodTile(
                     icon: Icons.currency_bitcoin_rounded,
-                    color: const Color(0xFF8247E5),
-                    label: 'USDT (Polygon)',
-                    subtitle: '手续费极低',
-                    onTap: () => Navigator.of(context).pop('usdt_polygon'),
-                  ),
-                  const SizedBox(height: 8),
-                  _PayMethodTile(
-                    icon: Icons.currency_bitcoin_rounded,
-                    color: const Color(0xFF28A0F0),
-                    label: 'USDT (Arbitrum)',
-                    subtitle: '手续费极低',
-                    onTap: () => Navigator.of(context).pop('usdt_arbitrum'),
-                  ),
-                  const SizedBox(height: 8),
-                  _PayMethodTile(
-                    icon: Icons.currency_bitcoin_rounded,
                     color: const Color(0xFF0052FF),
                     label: 'USDT (Base)',
                     subtitle: '手续费极低',
                     onTap: () => Navigator.of(context).pop('usdt_base'),
-                  ),
-                  const SizedBox(height: 8),
-                  _PayMethodTile(
-                    icon: Icons.currency_bitcoin_rounded,
-                    color: const Color(0xFF26A17B),
-                    label: 'USDT (TRC-20)',
-                    subtitle: '',
-                    onTap: () => Navigator.of(context).pop('usdt'),
                   ),
                   const SizedBox(height: 12),
                   Align(
@@ -912,22 +888,6 @@ class _PayMethodPicker extends StatelessWidget {
                     label: 'USDC (BSC)',
                     subtitle: '手续费极低',
                     onTap: () => Navigator.of(context).pop('usdc_bsc'),
-                  ),
-                  const SizedBox(height: 8),
-                  _PayMethodTile(
-                    icon: Icons.monetization_on_rounded,
-                    color: const Color(0xFF2775CA),
-                    label: 'USDC (Polygon)',
-                    subtitle: '手续费极低',
-                    onTap: () => Navigator.of(context).pop('usdc_polygon'),
-                  ),
-                  const SizedBox(height: 8),
-                  _PayMethodTile(
-                    icon: Icons.monetization_on_rounded,
-                    color: const Color(0xFF2775CA),
-                    label: 'USDC (Arbitrum)',
-                    subtitle: '手续费极低',
-                    onTap: () => Navigator.of(context).pop('usdc_arbitrum'),
                   ),
                   const SizedBox(height: 8),
                   _PayMethodTile(
