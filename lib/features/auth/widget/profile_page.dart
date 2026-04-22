@@ -48,6 +48,7 @@ class ProfilePage extends HookWidget {
     final deviceId = userInfo.value?['device_id'] ?? '';
     final expireDate = userInfo.value?['expire_date'];
     final trafficLimit = (userInfo.value?['traffic_limit_gb'] ?? 0).toDouble();
+    final trafficUsed = (userInfo.value?['total_traffic_used_gb'] ?? 0).toDouble();
     final tier = (userInfo.value?['tier'] as String?) ?? 'free';
     final isPaid = tier == 'vip' || tier == 'svip';
     final tierLabel = isPaid ? (tier == 'svip' ? s['svipTier']! : s['vipTier']!) : s['freeTier']!;
@@ -87,7 +88,7 @@ class ProfilePage extends HookWidget {
           _infoRow(s['currentPlan']!, isPaid ? tierLabel : s['noPlan']!, tierColor),
           if (isPaid) ...[
             _infoRow(s['expireDate']!, _fmtDate(expireDate), null),
-            _infoRow(s['trafficUsed']!, trafficLimit > 0 ? '${trafficLimit.toStringAsFixed(0)} GB' : s['unlimitedTraffic']!, null),
+            _infoRow(s['trafficUsed']!, trafficLimit > 0 ? '${trafficUsed.toStringAsFixed(1)}/${trafficLimit.toStringAsFixed(0)} GB' : s['unlimitedTraffic']!, null),
           ],
           if (!isPaid) ...[
             _infoRow(s['freeNodeLimit']!, s['freeNodeLimitVal']!, Colors.orange),
@@ -321,29 +322,18 @@ class _OrderHistoryCard extends HookWidget {
     final orders = useState<List<Map<String, dynamic>>>([]);
     final isLoading = useState(true);
     final expanded = useState(false);
+    final expandedOrderNo = useState<String?>(null);
 
     useEffect(() {
       () async {
         final prefs = await SharedPreferences.getInstance();
         final auth = AuthService(prefs);
-        orders.value = await auth.getMyOrders();
+        final all = await auth.getMyOrders();
+        orders.value = all.where((o) => o['status'] == 'paid').toList();
         isLoading.value = false;
       }();
       return null;
     }, []);
-
-    final statusLabel = {
-      'paid': '已支付',
-      'pending': '待支付',
-      'cancelled': '已取消',
-      'expired': '已过期',
-    };
-    final statusColor = {
-      'paid': Colors.green,
-      'pending': Colors.orange,
-      'cancelled': Colors.grey,
-      'expired': Colors.red,
-    };
 
     return Container(
       padding: const EdgeInsets.all(16),
@@ -379,40 +369,62 @@ class _OrderHistoryCard extends HookWidget {
               Text('暂无订单', style: TextStyle(fontSize: 13, color: Colors.grey.shade500))
             else
               ...orders.value.map((o) {
-                final status = o['status'] as String? ?? 'pending';
+                final orderNo = o['order_no'] as String? ?? '';
+                final isDetail = expandedOrderNo.value == orderNo;
                 final amount = o['amount_cny'] != null
                     ? '¥${o['amount_cny']}'
-                    : (o['pay_amount_usdt'] != null ? '\$${(o['pay_amount_usdt'] as num).toStringAsFixed(2)}' : '\$${(o['amount_usdt'] as num).toStringAsFixed(2)}');
+                    : (o['pay_amount_usdt'] != null
+                        ? '\$${(o['pay_amount_usdt'] as num).toStringAsFixed(2)}'
+                        : '\$${(o['amount_usdt'] as num).toStringAsFixed(2)}');
                 final created = o['created_at'] as String? ?? '';
+                final paidAt = o['paid_at'] as String? ?? '';
                 final dateStr = created.length >= 10 ? created.substring(0, 10) : created;
-                return Padding(
-                  padding: const EdgeInsets.only(bottom: 8),
-                  child: Row(
-                    children: [
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
+                final paidDateStr = paidAt.length >= 16 ? paidAt.substring(0, 16).replaceAll('T', ' ') : paidAt;
+                final days = o['days'] ?? 0;
+                final bonusDays = o['bonus_days'] ?? 0;
+                final method = o['payment_method'] as String? ?? '';
+                final methodLabel = const {'alipay': '支付宝', 'wechat': '微信', 'usdt': 'USDT', 'usdc': 'USDC'}[method] ?? method;
+
+                return GestureDetector(
+                  onTap: () => expandedOrderNo.value = isDetail ? null : orderNo,
+                  child: Container(
+                    margin: const EdgeInsets.only(bottom: 8),
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: isDetail ? Colors.white : Colors.transparent,
+                      borderRadius: BorderRadius.circular(8),
+                      border: isDetail ? Border.all(color: Colors.green.shade100) : null,
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(children: [
+                          Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                             Text(o['plan_name'] ?? '', style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500)),
                             const SizedBox(height: 2),
                             Text(dateStr, style: TextStyle(fontSize: 11, color: Colors.grey.shade500)),
-                          ],
-                        ),
-                      ),
-                      Text(amount, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
-                      const SizedBox(width: 8),
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                        decoration: BoxDecoration(
-                          color: (statusColor[status] ?? Colors.grey).withOpacity(0.1),
-                          borderRadius: BorderRadius.circular(4),
-                        ),
-                        child: Text(
-                          statusLabel[status] ?? status,
-                          style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: statusColor[status] ?? Colors.grey),
-                        ),
-                      ),
-                    ],
+                          ])),
+                          Text(amount, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+                          const SizedBox(width: 8),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                            decoration: BoxDecoration(color: Colors.green.withOpacity(0.1), borderRadius: BorderRadius.circular(4)),
+                            child: const Text('已支付', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: Colors.green)),
+                          ),
+                          const SizedBox(width: 4),
+                          Icon(isDetail ? Icons.expand_less : Icons.expand_more, size: 16, color: Colors.grey.shade400),
+                        ]),
+                        if (isDetail) ...[
+                          const SizedBox(height: 10),
+                          Divider(height: 1, color: Colors.grey.shade200),
+                          const SizedBox(height: 10),
+                          _detailRow('订单号', orderNo),
+                          _detailRow('支付方式', methodLabel),
+                          _detailRow('套餐时长', '$days 天${bonusDays > 0 ? ' (+$bonusDays天赠送)' : ''}'),
+                          _detailRow('支付时间', paidDateStr),
+                        ],
+                      ],
+                    ),
                   ),
                 );
               }),
@@ -421,8 +433,17 @@ class _OrderHistoryCard extends HookWidget {
       ),
     );
   }
-}
 
+  static Widget _detailRow(String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 6),
+      child: Row(children: [
+        SizedBox(width: 70, child: Text(label, style: TextStyle(fontSize: 12, color: Colors.grey.shade500))),
+        Expanded(child: Text(value, style: const TextStyle(fontSize: 12, color: Colors.black87))),
+      ]),
+    );
+  }
+}
 class _ApplyInviteCard extends HookWidget {
   final VoidCallback onSuccess;
   const _ApplyInviteCard({required this.onSuccess});
