@@ -340,7 +340,7 @@ class AuthService {
     return [];
   }
 
-  Future<Map<String, dynamic>?> createOrder(int planId, {String chain = 'trc20', String token = 'usdt'}) async {
+  Future<Map<String, dynamic>?> createOrder(int planId, {String chain = 'bsc', String token = 'usdt'}) async {
     try {
       var resp = await _postWithFallback(
         '/api/orders/',
@@ -540,7 +540,8 @@ class AuthService {
   /// Check for app updates. Returns version info or null.
   Future<Map<String, dynamic>?> checkAppUpdate() async {
     try {
-      final resp = await _getWithFallback('/api/app/version');
+      final platform = Platform.operatingSystem; // android, ios, windows, macos, linux
+      final resp = await _getWithFallback('/api/app/version?platform=$platform');
       if (resp != null) {
         return jsonDecode(_body(resp));
       }
