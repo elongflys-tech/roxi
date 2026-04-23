@@ -254,6 +254,13 @@ class AuthService {
       if (inviteCode != null && inviteCode.isNotEmpty) {
         body['invite_code'] = inviteCode;
       }
+      // Attach hardware fingerprint so device-register can find this user after reinstall
+      try {
+        final hwFp = await DeviceFingerprint.getHardwareFingerprint();
+        if (hwFp.isNotEmpty) body['hw_fingerprint'] = hwFp;
+        final devId = _prefs.getString(_deviceIdKey);
+        if (devId != null && devId.isNotEmpty) body['device_id'] = devId;
+      } catch (_) {}
       final resp = await http.post(
         Uri.parse('$baseUrl/api/auth/register'),
         headers: {'Content-Type': 'application/json'},
@@ -273,10 +280,18 @@ class AuthService {
 
   Future<String?> login(String email, String password) async {
     try {
+      final body = <String, dynamic>{'email': email, 'password': password};
+      // Attach hardware fingerprint so device-register can find this user after reinstall
+      try {
+        final hwFp = await DeviceFingerprint.getHardwareFingerprint();
+        if (hwFp.isNotEmpty) body['hw_fingerprint'] = hwFp;
+        final devId = _prefs.getString(_deviceIdKey);
+        if (devId != null && devId.isNotEmpty) body['device_id'] = devId;
+      } catch (_) {}
       final resp = await http.post(
         Uri.parse('$baseUrl/api/auth/login'),
         headers: {'Content-Type': 'application/json'},
-        body: jsonEncode({'email': email, 'password': password}),
+        body: jsonEncode(body),
       );
       if (resp.statusCode == 200) {
         final data = jsonDecode(_body(resp));
