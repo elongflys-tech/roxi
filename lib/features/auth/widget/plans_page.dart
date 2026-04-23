@@ -55,8 +55,8 @@ class _PlansSheet extends HookWidget {
           final sec = fetched[0]['discount_remaining_sec'] as int?;
           if (sec != null && sec > 0) remainingSec.value = sec;
           discountLabel.value = (fetched[0]['discount_label'] as String?) ?? '';
-          // Default select the recommended plan (annual VIP), or first
-          final recIdx = fetched.indexWhere((p) => (p['tier'] ?? 'vip') == 'vip' && ((p['days'] as num?)?.toInt() ?? 0) >= 365);
+          // Default select the recommended plan (SVIP 3-day trial), or first
+          final recIdx = fetched.indexWhere((p) => (p['tier'] ?? 'vip') == 'svip' && ((p['days'] as num?)?.toInt() ?? 0) <= 3);
           selectedIndex.value = recIdx >= 0 ? recIdx : 0;
         }
         if (fetched.isEmpty) loadError.value = true;
@@ -500,7 +500,7 @@ class _PlanCard extends StatelessWidget {
     final nameHasDiscount = (plan['name'] ?? '').toString().contains('折');
     final showDiscountBadge = hasDiscount && !nameHasDiscount;
     final days = (plan['days'] as num?)?.toInt() ?? 0;
-    final isRecommended = isVip && days >= 365;
+    final isRecommended = !isVip && days <= 3;
     final actualPrice = hasDiscount ? (discountCny as num).toDouble() : ((plan['price_cny'] as num?)?.toDouble() ?? 0);
     final perDay = days > 0 ? actualPrice / days : 0.0;
     final perDayText = '约 ¥${perDay.toStringAsFixed(1)}/天';
