@@ -78,14 +78,13 @@ class ProfilePage extends HookWidget {
               child: Row(children: [
                 Icon(Icons.devices_rounded, size: 20, color: Colors.blue.shade700),
                 const SizedBox(width: 12),
-                Expanded(child: Text('登录或注册账户，在不同设备间共享会员时长',
+                Expanded(child: Text('绑定邮箱，换机不丢账号，多设备同步',
                   style: TextStyle(fontSize: 13, color: Colors.blue.shade800))),
                 Icon(Icons.arrow_forward_ios_rounded, size: 14, color: Colors.blue.shade400),
               ]))),
         ],
         const SizedBox(height: 16),
-        _buildSection(theme, s['currentPlan']!, [
-          _infoRow(s['currentPlan']!, isPaid ? tierLabel : s['noPlan']!, tierColor),
+        _buildSection(theme, isPaid ? tierLabel : s['noPlan']!, [
           if (isPaid) ...[
             _infoRow(s['expireDate']!, _fmtDate(expireDate), null),
             _infoRow(s['trafficUsed']!, trafficLimit > 0 ? '${trafficUsed.toStringAsFixed(1)}/${trafficLimit.toStringAsFixed(0)} GB' : s['unlimitedTraffic']!, null),
@@ -272,7 +271,7 @@ class _AuthPanel extends HookWidget {
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Row(children: [
           Icon(Icons.devices_rounded, size: 20, color: Colors.blue.shade600), const SizedBox(width: 8),
-          Expanded(child: Text('您可以登录或注册一个账户，在不同设备间共享会员时长。',
+          Expanded(child: Text('绑定邮箱，换机不丢账号，多设备同步。',
             style: TextStyle(fontSize: 13, color: Colors.grey.shade700))),
         ]),
         const SizedBox(height: 16),
