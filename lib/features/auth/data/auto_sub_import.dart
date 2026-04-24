@@ -10,7 +10,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 part 'auto_sub_import.g.dart';
 
 /// Two real VLESS xhttp bootstrap nodes hardcoded in APK.
-/// Used as last-resort when ALL API domains (roxi.cc, roxijet.cloud) are blocked.
+/// Used as last-resort when ALL API domains (roxi.cc, roxijet.cloud, wizzegroup.com) are blocked.
 /// Once connected via these, the app auto-retries fetching the real subscription.
 const _bootstrapVlessNodes = [
   'vless://94134baf-dab3-41dc-9c15-085fdf15b86e@168.231.126.166:443?hiddify=1&sni=168.231.126.166&type=xhttp&alpn=http%2F1.1&path=%2FlY4xhKGq8xfNOWdIEmY7Q&host=168.231.126.166&encryption=none&fp=chrome&core=xray&extra=%7B%22headers%22%3A%7B%7D%7D&headerType=none&allowInsecure=true&insecure=true&security=tls#%F0%9F%8C%90%20%E5%BC%95%E5%AF%BC%E8%8A%82%E7%82%B91',
