@@ -10,7 +10,26 @@ class AuthService {
   static const List<String> _fallbackUrls = [
     'https://roxi.cc',
     'https://roxijet.cloud',
+    'https://wizzegroup.com',
   ];
+
+  /// Public access to fallback URLs (for multipart uploads in ticket_page etc.)
+  static List<String> get fallbackUrls => _fallbackUrls;
+
+  /// Public wrapper for GET with fallback (used by ticket_page etc.)
+  static Future<http.Response?> getWithFallback(
+    String path, {
+    Map<String, String>? headers,
+    Duration timeout = const Duration(seconds: 8),
+  }) => _getWithFallback(path, headers: headers, timeout: timeout);
+
+  /// Public wrapper for POST with fallback (used by ticket_page etc.)
+  static Future<http.Response?> postWithFallback(
+    String path, {
+    Map<String, String>? headers,
+    String? body,
+    Duration timeout = const Duration(seconds: 8),
+  }) => _postWithFallback(path, headers: headers, body: body, timeout: timeout);
 
   /// Try GET request across all fallback domains. Returns first successful response.
   static Future<http.Response?> _getWithFallback(
@@ -395,13 +414,14 @@ class AuthService {
     }
   }
 
-  /// Create CNY order (alipay/wechat) via JLB gateway.
-  Future<Map<String, dynamic>?> createCNYOrder(int planId, String channel) async {
+  /// Create CNY order (alipay/wechat) via payment gateway.
+  /// gateway: "xm" = 通道1 (default), "jlb" = 通道2 (backup)
+  Future<Map<String, dynamic>?> createCNYOrder(int planId, String channel, {String gateway = 'xm'}) async {
     try {
       var resp = await _postWithFallback(
         '/api/pay/create',
         headers: _headers,
-        body: jsonEncode({'plan_id': planId, 'channel': channel}),
+        body: jsonEncode({'plan_id': planId, 'channel': channel, 'gateway': gateway}),
         timeout: const Duration(seconds: 15),
       );
       
@@ -412,7 +432,7 @@ class AuthService {
           resp = await _postWithFallback(
             '/api/pay/create',
             headers: _headers,
-            body: jsonEncode({'plan_id': planId, 'channel': channel}),
+            body: jsonEncode({'plan_id': planId, 'channel': channel, 'gateway': gateway}),
             timeout: const Duration(seconds: 15),
           );
         }
