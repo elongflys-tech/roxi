@@ -263,7 +263,14 @@ class _PlansSheet extends HookWidget {
       }
       await _handleCryptoBuy(context, plan, chain: chain, token: token);
     } else {
-      await _handleCNYBuy(context, plan, method);
+      // CNY payment (alipay/wechat) — pick gateway channel
+      if (!context.mounted) return;
+      final gateway = await showModalBottomSheet<String>(
+        context: context,
+        builder: (ctx) => _GatewayPicker(),
+      );
+      if (gateway == null || !context.mounted) return;
+      await _handleCNYBuy(context, plan, method, gateway: gateway);
     }
   }
 
@@ -335,7 +342,7 @@ class _PlansSheet extends HookWidget {
     }
   }
 
-  Future<void> _handleCNYBuy(BuildContext context, Map<String, dynamic> plan, String channel) async {
+  Future<void> _handleCNYBuy(BuildContext context, Map<String, dynamic> plan, String channel, {String gateway = 'xm'}) async {
     final s = AuthI18n.t;
     final prefs = await SharedPreferences.getInstance();
     final auth = AuthService(prefs);
@@ -356,7 +363,7 @@ class _PlansSheet extends HookWidget {
     }
 
     try {
-      final result = await auth.createCNYOrder(plan['id'], channel).timeout(const Duration(seconds: 15));
+      final result = await auth.createCNYOrder(plan['id'], channel, gateway: gateway).timeout(const Duration(seconds: 15));
       if (!context.mounted) return;
       dismissLoading();
 
@@ -899,6 +906,67 @@ class _PayMethodPicker extends StatelessWidget {
                   ),
                 ],
               ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Gateway (payment channel) picker — 通道1 熊猫 (default) / 通道2 JLB (backup)
+class _GatewayPicker extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return SafeArea(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  width: 36, height: 4,
+                  decoration: BoxDecoration(
+                    color: theme.colorScheme.onSurfaceVariant.withOpacity(0.3),
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+                const SizedBox(height: 16),
+                Text(AuthI18n.t['selectGateway'] ?? '选择支付通道', style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold)),
+                const SizedBox(height: 4),
+                Text(
+                  AuthI18n.t['gatewayHint'] ?? '如通道1无法支付，请尝试通道2',
+                  style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+                ),
+                const SizedBox(height: 12),
+              ],
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                _PayMethodTile(
+                  icon: Icons.flash_on_rounded,
+                  color: const Color(0xFFFF6B35),
+                  label: AuthI18n.t['gateway1'] ?? '通道 1',
+                  subtitle: AuthI18n.t['recommended'] ?? '推荐',
+                  onTap: () => Navigator.of(context).pop('xm'),
+                ),
+                const SizedBox(height: 8),
+                _PayMethodTile(
+                  icon: Icons.swap_horiz_rounded,
+                  color: const Color(0xFF8888AA),
+                  label: AuthI18n.t['gateway2'] ?? '通道 2 (备用)',
+                  subtitle: '',
+                  onTap: () => Navigator.of(context).pop('jlb'),
+                ),
+              ],
             ),
           ),
         ],
