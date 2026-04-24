@@ -6,6 +6,7 @@ import 'package:hiddify/features/auth/data/auth_i18n.dart';
 import 'package:hiddify/features/auth/data/auth_service.dart';
 import 'package:hiddify/features/auth/widget/invite_rewards_page.dart';
 import 'package:hiddify/features/auth/widget/plans_page.dart';
+import 'package:hiddify/features/auth/widget/ticket_page.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 class ProfilePage extends HookWidget {
@@ -120,6 +121,12 @@ class ProfilePage extends HookWidget {
         OutlinedButton.icon(
           onPressed: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const InviteRewardsPage())),
           icon: const Icon(Icons.card_giftcard_rounded, size: 18), label: Text(s['inviteRewardsBtn']!),
+          style: OutlinedButton.styleFrom(padding: const EdgeInsets.symmetric(vertical: 12),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)))),
+        const SizedBox(height: 8),
+        OutlinedButton.icon(
+          onPressed: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const TicketListPage())),
+          icon: const Icon(Icons.support_agent_rounded, size: 18), label: Text(s['ticketBtn'] ?? '问题反馈'),
           style: OutlinedButton.styleFrom(padding: const EdgeInsets.symmetric(vertical: 12),
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)))),
         if (!hasUsedInvite) ...[const SizedBox(height: 16), _ApplyInviteCard(onSuccess: reload)],
