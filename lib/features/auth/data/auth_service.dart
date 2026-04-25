@@ -203,10 +203,18 @@ class AuthService {
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode(body),
       );
-      if (resp != null) {
+      if (resp != null && resp.statusCode == 200) {
         final data = jsonDecode(_body(resp));
         await _prefs.setString(_tokenKey, data['access_token']);
         return null;
+      }
+      if (resp != null) {
+        try {
+          final err = jsonDecode(_body(resp));
+          return err['detail'] ?? '注册失败 (${resp.statusCode})';
+        } catch (_) {
+          return '服务器错误 (${resp.statusCode})';
+        }
       }
       return '网络连接失败，请检查网络';
     } catch (e) {
@@ -242,8 +250,12 @@ class AuthService {
         await _prefs.setString(_emailKey, email);
         return null;
       }
-      final err = jsonDecode(_body(resp));
-      return err['detail'] ?? '绑定失败';
+      try {
+        final err = jsonDecode(_body(resp));
+        return err['detail'] ?? '绑定失败 (${resp.statusCode})';
+      } catch (_) {
+        return '服务器错误 (${resp.statusCode})';
+      }
     } catch (e) {
       return '网络错误: $e';
     }
@@ -260,8 +272,12 @@ class AuthService {
       if (resp.statusCode == 200) {
         return null;
       }
-      final err = jsonDecode(_body(resp));
-      return err['detail'] ?? '邀请码无效';
+      try {
+        final err = jsonDecode(_body(resp));
+        return err['detail'] ?? '邀请码无效 (${resp.statusCode})';
+      } catch (_) {
+        return '服务器错误 (${resp.statusCode})';
+      }
     } catch (e) {
       return '网络错误: $e';
     }
@@ -290,8 +306,12 @@ class AuthService {
         await _saveAuth(data['access_token'], email);
         return null;
       }
-      final err = jsonDecode(_body(resp));
-      return err['detail'] ?? '注册失败';
+      try {
+        final err = jsonDecode(_body(resp));
+        return err['detail'] ?? '注册失败 (${resp.statusCode})';
+      } catch (_) {
+        return '服务器错误 (${resp.statusCode})';
+      }
     } catch (e) {
       return '网络错误: $e';
     }
@@ -317,8 +337,12 @@ class AuthService {
         await _saveAuth(data['access_token'], email);
         return null;
       }
-      final err = jsonDecode(_body(resp));
-      return err['detail'] ?? '登录失败';
+      try {
+        final err = jsonDecode(_body(resp));
+        return err['detail'] ?? '登录失败 (${resp.statusCode})';
+      } catch (_) {
+        return '服务器错误 (${resp.statusCode})';
+      }
     } catch (e) {
       return '网络错误: $e';
     }
@@ -327,7 +351,7 @@ class AuthService {
   Future<Map<String, dynamic>?> getSubscription() async {
     try {
       final resp = await _getWithFallback('/api/user/subscription', headers: _headers);
-      if (resp != null) {
+      if (resp != null && resp.statusCode == 200) {
         return jsonDecode(_body(resp));
       }
     } catch (_) {}
@@ -505,7 +529,7 @@ class AuthService {
   Future<Map<String, dynamic>?> getUserInfo() async {
     try {
       final resp = await _getWithFallback('/api/user/me', headers: _headers);
-      if (resp != null) {
+      if (resp != null && resp.statusCode == 200) {
         final data = jsonDecode(_body(resp)) as Map<String, dynamic>;
         // Cache key fields locally for offline access
         final tier = data['tier'] as String?;
@@ -543,7 +567,7 @@ class AuthService {
   Future<Map<String, dynamic>?> getTrialStatus() async {
     try {
       final resp = await _getWithFallback('/api/user/trial-status', headers: _headers);
-      if (resp != null) {
+      if (resp != null && resp.statusCode == 200) {
         final data = jsonDecode(_body(resp)) as Map<String, dynamic>;
         // Cache status for offline
         final status = data['status'] as String?;
@@ -565,7 +589,7 @@ class AuthService {
         '/api/user/trial-heartbeat',
         headers: _headers,
       );
-      if (resp != null) {
+      if (resp != null && resp.statusCode == 200) {
         return jsonDecode(_body(resp));
       }
     } catch (_) {}
@@ -577,7 +601,7 @@ class AuthService {
     try {
       final platform = Platform.operatingSystem; // android, ios, windows, macos, linux
       final resp = await _getWithFallback('/api/app/version?platform=$platform');
-      if (resp != null) {
+      if (resp != null && resp.statusCode == 200) {
         return jsonDecode(_body(resp));
       }
     } catch (_) {}
@@ -593,7 +617,7 @@ class AuthService {
         '/api/auth/refresh-token',
         headers: _headers,
       );
-      if (resp != null) {
+      if (resp != null && resp.statusCode == 200) {
         final data = jsonDecode(_body(resp));
         final newToken = data['access_token'] as String?;
         if (newToken != null && newToken.isNotEmpty) {
@@ -615,8 +639,12 @@ class AuthService {
       if (resp.statusCode == 200) {
         return null;
       }
-      final err = jsonDecode(_body(resp));
-      return err['detail'] ?? '修改失败';
+      try {
+        final err = jsonDecode(_body(resp));
+        return err['detail'] ?? '修改失败 (${resp.statusCode})';
+      } catch (_) {
+        return '服务器错误 (${resp.statusCode})';
+      }
     } catch (e) {
       return '网络错误: $e';
     }
