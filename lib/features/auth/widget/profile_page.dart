@@ -129,6 +129,8 @@ class ProfilePage extends HookWidget {
           icon: const Icon(Icons.support_agent_rounded, size: 18), label: Text(s['ticketBtn'] ?? '问题反馈'),
           style: OutlinedButton.styleFrom(padding: const EdgeInsets.symmetric(vertical: 12),
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)))),
+        const SizedBox(height: 8),
+        _ResetSubscriptionButton(onReset: reload),
         if (!hasUsedInvite) ...[const SizedBox(height: 16), _ApplyInviteCard(onSuccess: reload)],
         if (hasEmail) ...[const SizedBox(height: 16), _ChangePasswordCard()],
         if (hasEmail) ...[
@@ -450,6 +452,73 @@ class _OrderHistoryCard extends HookWidget {
     );
   }
 }
+class _ResetSubscriptionButton extends HookWidget {
+  final VoidCallback onReset;
+  const _ResetSubscriptionButton({required this.onReset});
+
+  @override
+  Widget build(BuildContext context) {
+    final s = AuthI18n.t;
+    final isLoading = useState(false);
+
+    Future<void> doReset() async {
+      final confirmed = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: Text(s['resetSubBtn'] ?? '重置订阅链接'),
+          content: Text(s['resetSubConfirm'] ?? '重置后旧订阅链接将立即失效，所有客户端需重新导入新链接。\n\n确认重置？'),
+          actions: [
+            TextButton(onPressed: () => Navigator.of(ctx).pop(false), child: Text(s['cancel'] ?? '取消')),
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(true),
+              child: Text(s['resetSubBtn'] ?? '重置', style: const TextStyle(color: Colors.red)),
+            ),
+          ],
+        ),
+      );
+      if (confirmed != true) return;
+
+      isLoading.value = true;
+      final prefs = await SharedPreferences.getInstance();
+      final auth = AuthService(prefs);
+      final result = await auth.resetSubscription();
+      isLoading.value = false;
+
+      if (result['ok'] == true) {
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text(s['resetSubSuccess'] ?? '订阅链接已重置，请在客户端重新导入'),
+            duration: const Duration(seconds: 4),
+          ));
+        }
+        onReset();
+      } else {
+        final detail = result['detail'] ?? s['resetSubFail'] ?? '重置失败';
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text(detail.toString()),
+            backgroundColor: Colors.red,
+            duration: const Duration(seconds: 3),
+          ));
+        }
+      }
+    }
+
+    return OutlinedButton.icon(
+      onPressed: isLoading.value ? null : doReset,
+      icon: isLoading.value
+          ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
+          : const Icon(Icons.refresh_rounded, size: 18, color: Colors.orange),
+      label: Text(s['resetSubBtn'] ?? '重置订阅链接', style: const TextStyle(color: Colors.orange)),
+      style: OutlinedButton.styleFrom(
+        padding: const EdgeInsets.symmetric(vertical: 12),
+        side: const BorderSide(color: Colors.orange, width: 0.8),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      ),
+    );
+  }
+}
+
 class _ApplyInviteCard extends HookWidget {
   final VoidCallback onSuccess;
   const _ApplyInviteCard({required this.onSuccess});
