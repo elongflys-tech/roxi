@@ -241,21 +241,24 @@ class AuthService {
   /// Bind email to device account for cross-device sync.
   Future<String?> bindEmail(String email, String password) async {
     try {
-      final resp = await http.post(
-        Uri.parse('$baseUrl/api/auth/bind-email'),
+      final resp = await _postWithFallback(
+        '/api/auth/bind-email',
         headers: _headers,
         body: jsonEncode({'email': email, 'password': password}),
       );
-      if (resp.statusCode == 200) {
+      if (resp != null && resp.statusCode == 200) {
         await _prefs.setString(_emailKey, email);
         return null;
       }
-      try {
-        final err = jsonDecode(_body(resp));
-        return err['detail'] ?? '绑定失败 (${resp.statusCode})';
-      } catch (_) {
-        return '服务器错误 (${resp.statusCode})';
+      if (resp != null) {
+        try {
+          final err = jsonDecode(_body(resp));
+          return err['detail'] ?? '绑定失败 (${resp.statusCode})';
+        } catch (_) {
+          return '服务器错误 (${resp.statusCode})';
+        }
       }
+      return '网络连接失败，请检查网络';
     } catch (e) {
       return '网络错误: $e';
     }
@@ -264,20 +267,23 @@ class AuthService {
   /// Apply invite code anytime (not just at registration).
   Future<String?> applyInvite(String inviteCode) async {
     try {
-      final resp = await http.post(
-        Uri.parse('$baseUrl/api/auth/apply-invite'),
+      final resp = await _postWithFallback(
+        '/api/auth/apply-invite',
         headers: _headers,
         body: jsonEncode({'invite_code': inviteCode}),
       );
-      if (resp.statusCode == 200) {
+      if (resp != null && resp.statusCode == 200) {
         return null;
       }
-      try {
-        final err = jsonDecode(_body(resp));
-        return err['detail'] ?? '邀请码无效 (${resp.statusCode})';
-      } catch (_) {
-        return '服务器错误 (${resp.statusCode})';
+      if (resp != null) {
+        try {
+          final err = jsonDecode(_body(resp));
+          return err['detail'] ?? '邀请码无效 (${resp.statusCode})';
+        } catch (_) {
+          return '服务器错误 (${resp.statusCode})';
+        }
       }
+      return '网络连接失败，请检查网络';
     } catch (e) {
       return '网络错误: $e';
     }
@@ -296,22 +302,25 @@ class AuthService {
         final devId = _prefs.getString(_deviceIdKey);
         if (devId != null && devId.isNotEmpty) body['device_id'] = devId;
       } catch (_) {}
-      final resp = await http.post(
-        Uri.parse('$baseUrl/api/auth/register'),
+      final resp = await _postWithFallback(
+        '/api/auth/register',
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode(body),
       );
-      if (resp.statusCode == 200) {
+      if (resp != null && resp.statusCode == 200) {
         final data = jsonDecode(_body(resp));
         await _saveAuth(data['access_token'], email);
         return null;
       }
-      try {
-        final err = jsonDecode(_body(resp));
-        return err['detail'] ?? '注册失败 (${resp.statusCode})';
-      } catch (_) {
-        return '服务器错误 (${resp.statusCode})';
+      if (resp != null) {
+        try {
+          final err = jsonDecode(_body(resp));
+          return err['detail'] ?? '注册失败 (${resp.statusCode})';
+        } catch (_) {
+          return '服务器错误 (${resp.statusCode})';
+        }
       }
+      return '网络连接失败，请检查网络';
     } catch (e) {
       return '网络错误: $e';
     }
@@ -327,22 +336,25 @@ class AuthService {
         final devId = _prefs.getString(_deviceIdKey);
         if (devId != null && devId.isNotEmpty) body['device_id'] = devId;
       } catch (_) {}
-      final resp = await http.post(
-        Uri.parse('$baseUrl/api/auth/login'),
+      final resp = await _postWithFallback(
+        '/api/auth/login',
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode(body),
       );
-      if (resp.statusCode == 200) {
+      if (resp != null && resp.statusCode == 200) {
         final data = jsonDecode(_body(resp));
         await _saveAuth(data['access_token'], email);
         return null;
       }
-      try {
-        final err = jsonDecode(_body(resp));
-        return err['detail'] ?? '登录失败 (${resp.statusCode})';
-      } catch (_) {
-        return '服务器错误 (${resp.statusCode})';
+      if (resp != null) {
+        try {
+          final err = jsonDecode(_body(resp));
+          return err['detail'] ?? '登录失败 (${resp.statusCode})';
+        } catch (_) {
+          return '服务器错误 (${resp.statusCode})';
+        }
       }
+      return '网络连接失败，请检查网络';
     } catch (e) {
       return '网络错误: $e';
     }
@@ -631,20 +643,23 @@ class AuthService {
 
   Future<String?> changePassword(String oldPassword, String newPassword) async {
     try {
-      final resp = await http.post(
-        Uri.parse('$baseUrl/api/user/change-password'),
+      final resp = await _postWithFallback(
+        '/api/user/change-password',
         headers: _headers,
         body: jsonEncode({'old_password': oldPassword, 'new_password': newPassword}),
       );
-      if (resp.statusCode == 200) {
+      if (resp != null && resp.statusCode == 200) {
         return null;
       }
-      try {
-        final err = jsonDecode(_body(resp));
-        return err['detail'] ?? '修改失败 (${resp.statusCode})';
-      } catch (_) {
-        return '服务器错误 (${resp.statusCode})';
+      if (resp != null) {
+        try {
+          final err = jsonDecode(_body(resp));
+          return err['detail'] ?? '修改失败 (${resp.statusCode})';
+        } catch (_) {
+          return '服务器错误 (${resp.statusCode})';
+        }
       }
+      return '网络连接失败，请检查网络';
     } catch (e) {
       return '网络错误: $e';
     }
