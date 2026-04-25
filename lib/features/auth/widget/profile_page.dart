@@ -88,7 +88,7 @@ class ProfilePage extends HookWidget {
         _buildSection(theme, isPaid ? tierLabel : s['noPlan']!, [
           if (isPaid) ...[
             _infoRow(s['expireDate']!, _fmtDate(expireDate), null),
-            _infoRow(s['trafficUsed']!, trafficLimit > 0 ? '${trafficUsed.toStringAsFixed(1)}/${trafficLimit.toStringAsFixed(0)} GB' : s['unlimitedTraffic']!, null),
+            _infoRow(s['trafficUsed']!, s['unlimitedTraffic']!, null),
           ],
           if (!isPaid) ...[
             _infoRow(s['freeNodeLimit']!, s['freeNodeLimitVal']!, Colors.orange),
