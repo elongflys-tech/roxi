@@ -330,9 +330,13 @@ class _PlansSheet extends HookWidget {
       );
       // Always refresh user info after payment dialog closes
       // (user may have paid after manually closing, or polling detected it)
-      auth.getUserInfo();
+      final updatedUser = await auth.getUserInfo();
       if (paid == true) {
         PaymentEvents.notifySuccess();
+        // Prompt device users to bind email for account safety
+        if (context.mounted && updatedUser != null && updatedUser['email'] == null) {
+          _showBindEmailPrompt(context);
+        }
       }
     } catch (_) {
       dismissLoading();
@@ -402,9 +406,13 @@ class _PlansSheet extends HookWidget {
         ),
       );
       // Always refresh user info after payment dialog closes
-      auth.getUserInfo();
+      final updatedUser = await auth.getUserInfo();
       if (paid == true) {
         PaymentEvents.notifySuccess();
+        // Prompt device users to bind email for account safety
+        if (context.mounted && updatedUser != null && updatedUser['email'] == null) {
+          _showBindEmailPrompt(context);
+        }
       }
     } catch (_) {
       dismissLoading();
@@ -414,6 +422,138 @@ class _PlansSheet extends HookWidget {
         );
       }
     }
+  }
+}
+
+/// Show bind-email prompt after payment for device-only users.
+Future<void> _showBindEmailPrompt(BuildContext context) async {
+  final s = AuthI18n.t;
+  final result = await showDialog<String>(
+    context: context,
+    barrierDismissible: true,
+    builder: (ctx) {
+      final theme = Theme.of(ctx);
+      return AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Text(
+          s['bindEmailAfterPayTitle'] ?? '🔒 保护您的会员',
+          style: const TextStyle(fontSize: 18),
+        ),
+        content: Text(
+          s['bindEmailAfterPayDesc'] ?? '绑定邮箱后，换设备也不会丢失会员时长',
+          style: theme.textTheme.bodyMedium?.copyWith(
+            color: theme.colorScheme.onSurfaceVariant,
+            height: 1.5,
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop('skip'),
+            child: Text(
+              s['bindEmailAfterPaySkip'] ?? '稍后再说',
+              style: TextStyle(color: theme.colorScheme.onSurfaceVariant),
+            ),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(ctx).pop('bind'),
+            child: Text(s['bindEmailAfterPayBtn'] ?? '立即绑定'),
+          ),
+        ],
+      );
+    },
+  );
+  if (result == 'bind' && context.mounted) {
+    // Navigate to profile page where bind-email is available
+    // Use the existing bind email dialog from profile_page
+    _showBindEmailDialog(context);
+  }
+}
+
+/// Inline bind-email dialog (self-contained, no navigation needed).
+Future<void> _showBindEmailDialog(BuildContext context) async {
+  final s = AuthI18n.t;
+  final emailCtrl = TextEditingController();
+  final passCtrl = TextEditingController();
+
+  final result = await showDialog<bool>(
+    context: context,
+    builder: (ctx) {
+      final theme = Theme.of(ctx);
+      return AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Text(s['bindEmail'] ?? '绑定邮箱'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              controller: emailCtrl,
+              decoration: InputDecoration(
+                labelText: s['email'] ?? '邮箱',
+                border: const OutlineInputBorder(),
+                isDense: true,
+              ),
+              keyboardType: TextInputType.emailAddress,
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: passCtrl,
+              decoration: InputDecoration(
+                labelText: s['password'] ?? '密码',
+                border: const OutlineInputBorder(),
+                isDense: true,
+              ),
+              obscureText: true,
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: Text(s['cancel'] ?? '取消'),
+          ),
+          FilledButton(
+            onPressed: () async {
+              final email = emailCtrl.text.trim();
+              final pass = passCtrl.text;
+              if (email.isEmpty || pass.length < 6) {
+                ScaffoldMessenger.of(ctx).showSnackBar(
+                  SnackBar(content: Text(s['passMin6'] ?? '密码至少6位')),
+                );
+                return;
+              }
+              try {
+                final prefs = await SharedPreferences.getInstance();
+                final auth = AuthService(prefs);
+                final err = await auth.bindEmail(email, pass);
+                if (err == null && ctx.mounted) {
+                  Navigator.of(ctx).pop(true);
+                } else if (ctx.mounted) {
+                  ScaffoldMessenger.of(ctx).showSnackBar(
+                    SnackBar(content: Text(err ?? '绑定失败')),
+                  );
+                }
+              } catch (_) {
+                if (ctx.mounted) {
+                  ScaffoldMessenger.of(ctx).showSnackBar(
+                    SnackBar(content: Text(s['orderFailed'] ?? '绑定失败')),
+                  );
+                }
+              }
+            },
+            child: Text(s['confirm'] ?? '确认'),
+          ),
+        ],
+      );
+    },
+  );
+
+  emailCtrl.dispose();
+  passCtrl.dispose();
+
+  if (result == true && context.mounted) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(s['bindSuccess'] ?? '邮箱绑定成功')),
+    );
   }
 }
 
