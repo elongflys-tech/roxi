@@ -189,6 +189,11 @@ class AuthI18n {
       'invalidInviteCode': '邀请码格式不正确（4-20位字母数字）',
       'logoutConfirm': '确定要退出登录吗？',
       'cancel': '取消',
+      // Reset subscription
+      'resetSubBtn': '重置订阅链接',
+      'resetSubConfirm': '重置后旧订阅链接将立即失效，所有客户端需重新导入新链接。\n\n确认重置？',
+      'resetSubSuccess': '订阅链接已重置，请在客户端重新导入',
+      'resetSubFail': '重置失败',
       // Tickets
       'ticketBtn': '问题反馈',
       'ticketTitle': '问题反馈',
@@ -367,6 +372,11 @@ class AuthI18n {
       'invalidInviteCode': 'Invalid invite code (4-20 alphanumeric)',
       'logoutConfirm': 'Are you sure you want to logout?',
       'cancel': 'Cancel',
+      // Reset subscription
+      'resetSubBtn': 'Reset Subscription Link',
+      'resetSubConfirm': 'After reset, the old subscription link will be invalid immediately. All clients need to re-import.\n\nConfirm reset?',
+      'resetSubSuccess': 'Subscription link has been reset. Please re-import in your client.',
+      'resetSubFail': 'Reset failed',
       // Tickets
       'ticketBtn': 'Feedback',
       'ticketTitle': 'Feedback',
@@ -518,6 +528,11 @@ class AuthI18n {
       'updateAvailable': 'نسخه جدید موجود است',
       'updateNow': 'بروزرسانی',
       'updateLater': 'بعداً',
+      // Reset subscription
+      'resetSubBtn': 'بازنشانی لینک اشتراک',
+      'resetSubConfirm': 'پس از بازنشانی، لینک قدیمی فوراً نامعتبر می‌شود. همه کلاینت‌ها باید دوباره وارد شوند.\n\nتأیید؟',
+      'resetSubSuccess': 'لینک اشتراک بازنشانی شد. لطفاً در کلاینت دوباره وارد کنید.',
+      'resetSubFail': 'بازنشانی ناموفق',
       // Tickets
       'ticketBtn': 'بازخورد',
       'ticketTitle': 'بازخورد',
@@ -658,6 +673,11 @@ class AuthI18n {
       'updateAvailable': 'Доступна новая версия',
       'updateNow': 'Обновить',
       'updateLater': 'Позже',
+      // Reset subscription
+      'resetSubBtn': 'Сбросить ссылку подписки',
+      'resetSubConfirm': 'После сброса старая ссылка станет недействительной. Все клиенты нужно обновить.\n\nПодтвердить?',
+      'resetSubSuccess': 'Ссылка подписки сброшена. Импортируйте новую ссылку в клиент.',
+      'resetSubFail': 'Ошибка сброса',
       // Tickets
       'ticketBtn': 'Обратная связь',
       'ticketTitle': 'Обратная связь',
@@ -798,6 +818,11 @@ class AuthI18n {
       'updateAvailable': 'يتوفر إصدار جديد',
       'updateNow': 'تحديث الآن',
       'updateLater': 'لاحقاً',
+      // Reset subscription
+      'resetSubBtn': 'إعادة تعيين رابط الاشتراك',
+      'resetSubConfirm': 'بعد إعادة التعيين، سيصبح الرابط القديم غير صالح فوراً. يجب إعادة الاستيراد في جميع العملاء.\n\nتأكيد؟',
+      'resetSubSuccess': 'تم إعادة تعيين رابط الاشتراك. يرجى إعادة الاستيراد في العميل.',
+      'resetSubFail': 'فشل إعادة التعيين',
       // Tickets
       'ticketBtn': 'ملاحظات',
       'ticketTitle': 'ملاحظات',
