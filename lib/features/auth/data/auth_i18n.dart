@@ -194,6 +194,11 @@ class AuthI18n {
       'resetSubConfirm': '重置后旧订阅链接将立即失效，所有客户端需重新导入新链接。\n\n确认重置？',
       'resetSubSuccess': '订阅链接已重置，请在客户端重新导入',
       'resetSubFail': '重置失败',
+      // Bind email after payment
+      'bindEmailAfterPayTitle': '🔒 保护您的会员',
+      'bindEmailAfterPayDesc': '绑定邮箱后，换设备也不会丢失会员时长',
+      'bindEmailAfterPayBtn': '立即绑定',
+      'bindEmailAfterPaySkip': '稍后再说',
       // Tickets
       'ticketBtn': '问题反馈',
       'ticketTitle': '问题反馈',
@@ -377,6 +382,11 @@ class AuthI18n {
       'resetSubConfirm': 'After reset, the old subscription link will be invalid immediately. All clients need to re-import.\n\nConfirm reset?',
       'resetSubSuccess': 'Subscription link has been reset. Please re-import in your client.',
       'resetSubFail': 'Reset failed',
+      // Bind email after payment
+      'bindEmailAfterPayTitle': '🔒 Protect Your Membership',
+      'bindEmailAfterPayDesc': 'Link your email so you won\'t lose membership when switching devices',
+      'bindEmailAfterPayBtn': 'Link Now',
+      'bindEmailAfterPaySkip': 'Later',
       // Tickets
       'ticketBtn': 'Feedback',
       'ticketTitle': 'Feedback',
@@ -533,6 +543,11 @@ class AuthI18n {
       'resetSubConfirm': 'پس از بازنشانی، لینک قدیمی فوراً نامعتبر می‌شود. همه کلاینت‌ها باید دوباره وارد شوند.\n\nتأیید؟',
       'resetSubSuccess': 'لینک اشتراک بازنشانی شد. لطفاً در کلاینت دوباره وارد کنید.',
       'resetSubFail': 'بازنشانی ناموفق',
+      // Bind email after payment
+      'bindEmailAfterPayTitle': '🔒 محافظت از عضویت',
+      'bindEmailAfterPayDesc': 'ایمیل خود را متصل کنید تا عضویت هنگام تعویض دستگاه از بین نرود',
+      'bindEmailAfterPayBtn': 'اتصال',
+      'bindEmailAfterPaySkip': 'بعداً',
       // Tickets
       'ticketBtn': 'بازخورد',
       'ticketTitle': 'بازخورد',
@@ -678,6 +693,11 @@ class AuthI18n {
       'resetSubConfirm': 'После сброса старая ссылка станет недействительной. Все клиенты нужно обновить.\n\nПодтвердить?',
       'resetSubSuccess': 'Ссылка подписки сброшена. Импортируйте новую ссылку в клиент.',
       'resetSubFail': 'Ошибка сброса',
+      // Bind email after payment
+      'bindEmailAfterPayTitle': '🔒 Защитите подписку',
+      'bindEmailAfterPayDesc': 'Привяжите email, чтобы не потерять подписку при смене устройства',
+      'bindEmailAfterPayBtn': 'Привязать',
+      'bindEmailAfterPaySkip': 'Позже',
       // Tickets
       'ticketBtn': 'Обратная связь',
       'ticketTitle': 'Обратная связь',
@@ -823,6 +843,11 @@ class AuthI18n {
       'resetSubConfirm': 'بعد إعادة التعيين، سيصبح الرابط القديم غير صالح فوراً. يجب إعادة الاستيراد في جميع العملاء.\n\nتأكيد؟',
       'resetSubSuccess': 'تم إعادة تعيين رابط الاشتراك. يرجى إعادة الاستيراد في العميل.',
       'resetSubFail': 'فشل إعادة التعيين',
+      // Bind email after payment
+      'bindEmailAfterPayTitle': '🔒 حماية عضويتك',
+      'bindEmailAfterPayDesc': 'اربط بريدك الإلكتروني حتى لا تفقد العضوية عند تغيير الجهاز',
+      'bindEmailAfterPayBtn': 'ربط الآن',
+      'bindEmailAfterPaySkip': 'لاحقاً',
       // Tickets
       'ticketBtn': 'ملاحظات',
       'ticketTitle': 'ملاحظات',
