@@ -239,6 +239,8 @@ class AuthService {
   }
 
   /// Bind email to device account for cross-device sync.
+  /// If the email is already registered, verifies password and merges accounts.
+  /// Returns null on success, error message on failure.
   Future<String?> bindEmail(String email, String password) async {
     try {
       final resp = await _postWithFallback(
@@ -247,7 +249,18 @@ class AuthService {
         body: jsonEncode({'email': email, 'password': password}),
       );
       if (resp != null && resp.statusCode == 200) {
+        final data = jsonDecode(_body(resp));
+        // Save the new token (may be a different account after merge)
+        final newToken = data['access_token'] as String?;
+        if (newToken != null && newToken.isNotEmpty) {
+          await _prefs.setString(_tokenKey, newToken);
+        }
         await _prefs.setString(_emailKey, email);
+        // Clear caches so UI refreshes with merged account data
+        _userInfoCache = null;
+        _userInfoCacheTime = null;
+        _inviteInfoCache = null;
+        _inviteInfoCacheTime = null;
         return null;
       }
       if (resp != null) {
@@ -368,6 +381,33 @@ class AuthService {
       }
     } catch (_) {}
     return null;
+  }
+
+  /// Reset subscription link — generates a new UUID, old link becomes invalid.
+  /// Returns {ok: true, new_subscription_url: "..."} on success,
+  /// or {error: true, detail: "..."} on failure.
+  Future<Map<String, dynamic>> resetSubscription() async {
+    try {
+      final resp = await _postWithFallback(
+        '/api/user/reset-subscription',
+        headers: _headers,
+        timeout: const Duration(seconds: 10),
+      );
+      if (resp != null && resp.statusCode == 200) {
+        return jsonDecode(_body(resp));
+      }
+      if (resp != null) {
+        try {
+          final err = jsonDecode(_body(resp));
+          return {'error': true, 'detail': err['detail'] ?? 'HTTP ${resp.statusCode}'};
+        } catch (_) {
+          return {'error': true, 'detail': '服务器错误 (${resp.statusCode})'};
+        }
+      }
+      return {'error': true, 'detail': '网络连接失败，请检查网络'};
+    } catch (e) {
+      return {'error': true, 'detail': '网络错误: $e'};
+    }
   }
 
   Future<List<Map<String, dynamic>>> getPlans({bool forceRefresh = false}) async {
