@@ -238,15 +238,42 @@ class AuthService {
     }
   }
 
+  /// Send email verification code for registration or email binding.
+  /// Returns null on success, error message on failure.
+  Future<String?> sendVerifyCode(String email) async {
+    try {
+      final resp = await _postWithFallback(
+        '/api/auth/send-code',
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({'email': email}),
+      );
+      if (resp != null && resp.statusCode == 200) {
+        return null;
+      }
+      if (resp != null) {
+        try {
+          final err = jsonDecode(_body(resp));
+          return err['detail'] ?? '发送失败 (${resp.statusCode})';
+        } catch (_) {
+          return '服务器错误 (${resp.statusCode})';
+        }
+      }
+      return '网络连接失败，请检查网络';
+    } catch (e) {
+      return '网络错误: $e';
+    }
+  }
+
   /// Bind email to device account for cross-device sync.
   /// If the email is already registered, verifies password and merges accounts.
+  /// For new emails, requires a verification code.
   /// Returns null on success, error message on failure.
-  Future<String?> bindEmail(String email, String password) async {
+  Future<String?> bindEmail(String email, String password, {String code = ''}) async {
     try {
       final resp = await _postWithFallback(
         '/api/auth/bind-email',
         headers: _headers,
-        body: jsonEncode({'email': email, 'password': password}),
+        body: jsonEncode({'email': email, 'password': password, 'code': code}),
       );
       if (resp != null && resp.statusCode == 200) {
         final data = jsonDecode(_body(resp));
@@ -302,9 +329,9 @@ class AuthService {
     }
   }
 
-  Future<String?> register(String email, String password, {String? inviteCode}) async {
+  Future<String?> register(String email, String password, {String? inviteCode, required String code}) async {
     try {
-      final body = <String, dynamic>{'email': email, 'password': password};
+      final body = <String, dynamic>{'email': email, 'password': password, 'code': code};
       if (inviteCode != null && inviteCode.isNotEmpty) {
         body['invite_code'] = inviteCode;
       }
