@@ -8,6 +8,7 @@ import 'package:hiddify/features/auth/widget/invite_rewards_page.dart';
 import 'package:hiddify/features/auth/widget/plans_page.dart';
 import 'package:hiddify/features/auth/widget/ticket_page.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 class ProfilePage extends HookWidget {
   const ProfilePage({super.key});
@@ -241,6 +242,10 @@ class _UserHeaderCard extends StatelessWidget {
   }
 }
 
+void _launchForgotPassword(BuildContext context) {
+  launchUrl(Uri.parse('https://roxi.cc/web/reset-password'), mode: LaunchMode.externalApplication);
+}
+
 class _AuthPanel extends HookWidget {
   final VoidCallback onSuccess;
   const _AuthPanel({required this.onSuccess});
@@ -253,7 +258,37 @@ class _AuthPanel extends HookWidget {
     final emailCtrl = useTextEditingController();
     final passCtrl = useTextEditingController();
     final inviteCtrl = useTextEditingController();
+    final codeCtrl = useTextEditingController();
     final errorMsg = useState<String?>(null);
+    final codeCooldown = useState(0);
+    final codeSent = useState(false);
+
+    // Countdown timer
+    useEffect(() {
+      if (codeCooldown.value <= 0) return null;
+      Future.delayed(const Duration(seconds: 1), () {
+        if (codeCooldown.value > 0) codeCooldown.value--;
+      });
+      return null;
+    }, [codeCooldown.value]);
+
+    Future<void> sendCode() async {
+      final em = emailCtrl.text.trim();
+      if (em.isEmpty || !RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$').hasMatch(em)) {
+        errorMsg.value = s['invalidEmail'] ?? '请输入有效的邮箱地址';
+        return;
+      }
+      errorMsg.value = null;
+      final prefs = await SharedPreferences.getInstance();
+      final auth = AuthService(prefs);
+      final err = await auth.sendVerifyCode(em);
+      if (err == null) {
+        codeSent.value = true;
+        codeCooldown.value = 60;
+      } else {
+        errorMsg.value = err;
+      }
+    }
 
     Future<void> submit() async {
       final em = emailCtrl.text.trim();
@@ -264,7 +299,14 @@ class _AuthPanel extends HookWidget {
       isLoading.value = true; errorMsg.value = null;
       final prefs = await SharedPreferences.getInstance();
       final auth = AuthService(prefs);
-      final result = isRegister.value ? await auth.bindEmail(em, pw) : await auth.login(em, pw);
+      final String? result;
+      if (isRegister.value) {
+        final code = codeCtrl.text.trim();
+        if (code.isEmpty) { isLoading.value = false; errorMsg.value = '请输入邮箱验证码'; return; }
+        result = await auth.bindEmail(em, pw, code: code);
+      } else {
+        result = await auth.login(em, pw);
+      }
       isLoading.value = false;
       if (result == null) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
@@ -297,10 +339,29 @@ class _AuthPanel extends HookWidget {
         TextField(controller: passCtrl, obscureText: true, onSubmitted: (_) => submit(),
           decoration: InputDecoration(labelText: s['password'], prefixIcon: const Icon(Icons.lock_outlined, size: 20),
             border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)), isDense: true)),
+        if (!isRegister.value) ...[
+          const SizedBox(height: 6),
+          Align(alignment: Alignment.centerRight,
+            child: GestureDetector(
+              onTap: () => _launchForgotPassword(context),
+              child: Text(s['forgotPassword'] ?? '忘记密码？',
+                style: TextStyle(fontSize: 12, color: Colors.blue.shade600)))),
+        ],
         if (isRegister.value) ...[const SizedBox(height: 12),
           TextField(controller: inviteCtrl,
             decoration: InputDecoration(labelText: s['inviteCode'], prefixIcon: const Icon(Icons.card_giftcard_outlined, size: 20),
-              border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)), isDense: true))],
+              border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)), isDense: true)),
+          const SizedBox(height: 12),
+          Row(children: [
+            Expanded(child: TextField(controller: codeCtrl, keyboardType: TextInputType.number, maxLength: 6,
+              decoration: InputDecoration(labelText: s['verifyCode'] ?? '验证码', prefixIcon: const Icon(Icons.verified_outlined, size: 20),
+                counterText: '', border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)), isDense: true))),
+            const SizedBox(width: 8),
+            SizedBox(height: 44, child: FilledButton.tonal(
+              onPressed: codeCooldown.value > 0 ? null : sendCode,
+              child: Text(codeCooldown.value > 0 ? '${codeCooldown.value}s' : (codeSent.value ? '重发' : '发送'), style: const TextStyle(fontSize: 13)))),
+          ]),
+        ],
         if (errorMsg.value != null) ...[const SizedBox(height: 8), Text(errorMsg.value!, style: const TextStyle(color: Colors.red, fontSize: 12))],
         const SizedBox(height: 16),
         SizedBox(width: double.infinity, height: 44, child: FilledButton(
