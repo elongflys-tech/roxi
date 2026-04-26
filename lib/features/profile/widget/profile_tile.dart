@@ -13,6 +13,7 @@ import 'package:hiddify/core/router/dialog/dialog_notifier.dart';
 import 'package:hiddify/core/router/go_router/helper/active_breakpoint_notifier.dart';
 import 'package:hiddify/core/widget/adaptive_icon.dart';
 import 'package:hiddify/core/widget/adaptive_menu.dart';
+import 'package:hiddify/features/profile/details/profile_details_page.dart';
 import 'package:hiddify/features/profile/model/profile_entity.dart';
 import 'package:hiddify/features/profile/notifier/profile_notifier.dart';
 import 'package:hiddify/features/profile/overview/profiles_notifier.dart';
@@ -95,11 +96,8 @@ class ProfileTile extends HookConsumerWidget {
                         : ProfileTileConst.cardBorderRadius,
                     onTap: () {
                       if (isMain) {
-                        if (Breakpoint(context).isMobile()) {
-                          ref.read(bottomSheetsNotifierProvider.notifier).showProfilesOverview();
-                        } else {
-                          context.goNamed('profiles');
-                        }
+                        // Always use bottom sheet — 'profiles' route does not exist
+                        ref.read(bottomSheetsNotifierProvider.notifier).showProfilesOverview();
                       } else {
                         if (selectActiveMutation.state.isInProgress) return;
                         // if (profile.active) return;
@@ -288,8 +286,16 @@ class ProfileActionsMenu extends HookConsumerWidget {
         icon: Icons.edit_rounded,
         title: t.common.edit,
         onTap: () {
-          if (Breakpoint(context).isMobile()) context.pop();
-          context.goNamed('profileDetails', pathParameters: {'id': profile.id});
+          if (Breakpoint(context).isMobile()) {
+            context.pop();
+            context.goNamed('profileDetails', pathParameters: {'id': profile.id});
+          } else {
+            // Desktop wide window — 'profileDetails' route is only registered
+            // under mobile breakpoint, so push via Navigator instead
+            Navigator.of(context).push(
+              MaterialPageRoute(builder: (_) => ProfileDetailsPage(id: profile.id)),
+            );
+          }
         },
       ),
       // if (!profile.active)
