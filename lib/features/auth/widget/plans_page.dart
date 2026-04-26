@@ -474,81 +474,129 @@ Future<void> _showBindEmailDialog(BuildContext context) async {
   final s = AuthI18n.t;
   final emailCtrl = TextEditingController();
   final passCtrl = TextEditingController();
+  final codeCtrl = TextEditingController();
 
   final result = await showDialog<bool>(
     context: context,
     builder: (ctx) {
-      final theme = Theme.of(ctx);
-      return AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: Text(s['bindEmail'] ?? '绑定邮箱'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextField(
-              controller: emailCtrl,
-              decoration: InputDecoration(
-                labelText: s['email'] ?? '邮箱',
-                border: const OutlineInputBorder(),
-                isDense: true,
+      int cooldown = 0;
+      String? codeError;
+      return StatefulBuilder(builder: (ctx, setState) {
+        // Countdown tick
+        if (cooldown > 0) {
+          Future.delayed(const Duration(seconds: 1), () {
+            if (ctx.mounted) setState(() { if (cooldown > 0) cooldown--; });
+          });
+        }
+        final theme = Theme.of(ctx);
+        return AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          title: Text(s['bindEmail'] ?? '绑定邮箱'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: emailCtrl,
+                decoration: InputDecoration(
+                  labelText: s['email'] ?? '邮箱',
+                  border: const OutlineInputBorder(),
+                  isDense: true,
+                ),
+                keyboardType: TextInputType.emailAddress,
               ),
-              keyboardType: TextInputType.emailAddress,
+              const SizedBox(height: 12),
+              TextField(
+                controller: passCtrl,
+                decoration: InputDecoration(
+                  labelText: s['password'] ?? '密码',
+                  border: const OutlineInputBorder(),
+                  isDense: true,
+                ),
+                obscureText: true,
+              ),
+              const SizedBox(height: 12),
+              Row(children: [
+                Expanded(child: TextField(
+                  controller: codeCtrl,
+                  keyboardType: TextInputType.number,
+                  maxLength: 6,
+                  decoration: InputDecoration(
+                    labelText: s['verifyCode'] ?? '验证码',
+                    border: const OutlineInputBorder(),
+                    isDense: true,
+                    counterText: '',
+                    errorText: codeError,
+                  ),
+                )),
+                const SizedBox(width: 8),
+                SizedBox(height: 44, child: FilledButton.tonal(
+                  onPressed: cooldown > 0 ? null : () async {
+                    final email = emailCtrl.text.trim();
+                    if (email.isEmpty) { setState(() => codeError = '请输入邮箱'); return; }
+                    final prefs = await SharedPreferences.getInstance();
+                    final auth = AuthService(prefs);
+                    final err = await auth.sendVerifyCode(email);
+                    if (err == null) {
+                      setState(() { cooldown = 60; codeError = null; });
+                    } else {
+                      setState(() => codeError = err);
+                    }
+                  },
+                  child: Text(cooldown > 0 ? '${cooldown}s' : '发送', style: const TextStyle(fontSize: 13)),
+                )),
+              ]),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(false),
+              child: Text(s['cancel'] ?? '取消'),
             ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: passCtrl,
-              decoration: InputDecoration(
-                labelText: s['password'] ?? '密码',
-                border: const OutlineInputBorder(),
-                isDense: true,
-              ),
-              obscureText: true,
+            FilledButton(
+              onPressed: () async {
+                final email = emailCtrl.text.trim();
+                final pass = passCtrl.text;
+                final code = codeCtrl.text.trim();
+                if (email.isEmpty || pass.length < 6) {
+                  ScaffoldMessenger.of(ctx).showSnackBar(
+                    SnackBar(content: Text(s['passMin6'] ?? '密码至少6位')),
+                  );
+                  return;
+                }
+                if (code.isEmpty) {
+                  setState(() => codeError = '请输入验证码');
+                  return;
+                }
+                try {
+                  final prefs = await SharedPreferences.getInstance();
+                  final auth = AuthService(prefs);
+                  final err = await auth.bindEmail(email, pass, code: code);
+                  if (err == null && ctx.mounted) {
+                    Navigator.of(ctx).pop(true);
+                  } else if (ctx.mounted) {
+                    ScaffoldMessenger.of(ctx).showSnackBar(
+                      SnackBar(content: Text(err ?? '绑定失败')),
+                    );
+                  }
+                } catch (_) {
+                  if (ctx.mounted) {
+                    ScaffoldMessenger.of(ctx).showSnackBar(
+                      SnackBar(content: Text(s['orderFailed'] ?? '绑定失败')),
+                    );
+                  }
+                }
+              },
+              child: Text(s['confirm'] ?? '确认'),
             ),
           ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(false),
-            child: Text(s['cancel'] ?? '取消'),
-          ),
-          FilledButton(
-            onPressed: () async {
-              final email = emailCtrl.text.trim();
-              final pass = passCtrl.text;
-              if (email.isEmpty || pass.length < 6) {
-                ScaffoldMessenger.of(ctx).showSnackBar(
-                  SnackBar(content: Text(s['passMin6'] ?? '密码至少6位')),
-                );
-                return;
-              }
-              try {
-                final prefs = await SharedPreferences.getInstance();
-                final auth = AuthService(prefs);
-                final err = await auth.bindEmail(email, pass);
-                if (err == null && ctx.mounted) {
-                  Navigator.of(ctx).pop(true);
-                } else if (ctx.mounted) {
-                  ScaffoldMessenger.of(ctx).showSnackBar(
-                    SnackBar(content: Text(err ?? '绑定失败')),
-                  );
-                }
-              } catch (_) {
-                if (ctx.mounted) {
-                  ScaffoldMessenger.of(ctx).showSnackBar(
-                    SnackBar(content: Text(s['orderFailed'] ?? '绑定失败')),
-                  );
-                }
-              }
-            },
-            child: Text(s['confirm'] ?? '确认'),
-          ),
-        ],
-      );
+        );
+      });
     },
   );
 
   emailCtrl.dispose();
   passCtrl.dispose();
+  codeCtrl.dispose();
 
   if (result == true && context.mounted) {
     ScaffoldMessenger.of(context).showSnackBar(
