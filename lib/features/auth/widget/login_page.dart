@@ -19,7 +19,37 @@ class LoginPage extends HookConsumerWidget {
     final emailController = useTextEditingController();
     final passwordController = useTextEditingController();
     final inviteCodeController = useTextEditingController();
+    final codeController = useTextEditingController();
     final errorMsg = useState<String?>(null);
+    final codeSent = useState(false);
+    final codeCooldown = useState(0);
+
+    // Countdown timer for resend cooldown
+    useEffect(() {
+      if (codeCooldown.value <= 0) return null;
+      Future.delayed(const Duration(seconds: 1), () {
+        if (codeCooldown.value > 0) codeCooldown.value--;
+      });
+      return null;
+    }, [codeCooldown.value]);
+
+    Future<void> handleSendCode() async {
+      final email = emailController.text.trim();
+      if (email.isEmpty || !RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$').hasMatch(email)) {
+        errorMsg.value = s['invalidEmail'] ?? '请输入有效的邮箱地址';
+        return;
+      }
+      errorMsg.value = null;
+      final prefs = await SharedPreferences.getInstance();
+      final auth = AuthService(prefs);
+      final err = await auth.sendVerifyCode(email);
+      if (err == null) {
+        codeSent.value = true;
+        codeCooldown.value = 60;
+      } else {
+        errorMsg.value = err;
+      }
+    }
 
     Future<void> handleSubmit() async {
       final email = emailController.text.trim();
@@ -54,7 +84,13 @@ class LoginPage extends HookConsumerWidget {
       if (isLogin.value) {
         result = await auth.login(email, password);
       } else {
-        result = await auth.register(email, password, inviteCode: inviteCodeController.text.trim());
+        final code = codeController.text.trim();
+        if (code.isEmpty) {
+          isLoading.value = false;
+          errorMsg.value = '请输入邮箱验证码';
+          return;
+        }
+        result = await auth.register(email, password, inviteCode: inviteCodeController.text.trim(), code: code);
       }
 
       isLoading.value = false;
@@ -161,6 +197,39 @@ class LoginPage extends HookConsumerWidget {
                         borderRadius: BorderRadius.circular(12),
                       ),
                     ),
+                  ),
+                  const SizedBox(height: 16),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: TextField(
+                          controller: codeController,
+                          keyboardType: TextInputType.number,
+                          maxLength: 6,
+                          decoration: InputDecoration(
+                            labelText: s['verifyCode'] ?? '验证码',
+                            prefixIcon: const Icon(Icons.verified_outlined),
+                            counterText: '',
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      SizedBox(
+                        height: 48,
+                        child: FilledButton.tonal(
+                          onPressed: codeCooldown.value > 0 ? null : handleSendCode,
+                          child: Text(
+                            codeCooldown.value > 0
+                                ? '${codeCooldown.value}s'
+                                : (codeSent.value ? (s['resendCode'] ?? '重新发送') : (s['sendCode'] ?? '发送验证码')),
+                            style: const TextStyle(fontSize: 13),
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
                 ],
                 const SizedBox(height: 8),
