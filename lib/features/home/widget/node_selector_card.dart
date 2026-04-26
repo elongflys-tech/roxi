@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:hiddify/core/router/go_router/helper/active_breakpoint_notifier.dart';
 import 'package:hiddify/features/connection/model/connection_status.dart';
 import 'package:hiddify/features/connection/notifier/connection_notifier.dart';
 import 'package:hiddify/features/home/widget/node_list_card.dart';
@@ -42,9 +43,13 @@ class NodeSelectorCard extends HookConsumerWidget {
 
     return GestureDetector(
       onTap: () {
-        if (PlatformUtils.isDesktop) {
+        final isMobile = ref.read(isMobileBreakpointProvider) ?? !PlatformUtils.isDesktop;
+        if (PlatformUtils.isDesktop && !isMobile) {
+          // Desktop with wide window — NavigationRail visible, 'nodes' route exists
           context.goNamed('nodes');
         } else {
+          // Mobile platform, or desktop with narrow window (mobile breakpoint) —
+          // 'nodes' route is not registered, so push the node list page instead
           showNodeListSheet(context);
         }
       },
