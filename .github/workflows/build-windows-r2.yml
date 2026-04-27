@@ -39,9 +39,25 @@ jobs:
       - name: Download Windows core libs
         shell: bash
         run: |
+          set -e
           mkdir -p hiddify-core/bin
-          curl -L https://github.com/hiddify/hiddify-next-core/releases/download/draft/hiddify-lib-windows-amd64.tar.gz | tar xz -C hiddify-core/bin/
-          ls hiddify-core/bin/
+          echo "Downloading core libs from draft release..."
+          HTTP_CODE=$(curl -L -w '%{http_code}' -o /tmp/core.tar.gz https://github.com/hiddify/hiddify-next-core/releases/download/draft/hiddify-lib-windows-amd64.tar.gz)
+          if [ "$HTTP_CODE" != "200" ]; then
+            echo "ERROR: Download failed with HTTP $HTTP_CODE"
+            exit 1
+          fi
+          tar xz -C hiddify-core/bin/ -f /tmp/core.tar.gz
+          echo "=== Core libs ==="
+          ls -la hiddify-core/bin/
+          # Verify required files exist
+          for f in hiddify-core.dll HiddifyCli.exe; do
+            if [ ! -f "hiddify-core/bin/$f" ]; then
+              echo "ERROR: Required file missing: hiddify-core/bin/$f"
+              exit 1
+            fi
+          done
+          echo "All required core files present."
 
       - name: Generate code
         shell: bash
