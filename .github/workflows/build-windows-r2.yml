@@ -160,6 +160,7 @@ jobs:
 
       # ── Build MSIX installer ──
       - name: Build MSIX
+        continue-on-error: true
         shell: pwsh
         run: |
           # Update MSIX config with current version and certificate
@@ -175,25 +176,39 @@ jobs:
           Write-Host "=== MSIX Config ==="
           Get-Content $configPath
 
-          # Install msix_packer and build
+          # Install msix and build (may exit non-zero due to interactive cert prompt in CI)
           dart pub global activate msix
           dart pub global run msix:create --build-windows false
+          # The above may crash with "type 'Null' is not a subtype of type 'FutureOr<String>'"
+          # due to interactive certificate install prompt in CI. The MSIX file is still generated.
 
-          # Find and copy the MSIX file
-          $msixFile = Get-ChildItem -Path "build" -Filter "*.msix" -Recurse | Select-Object -First 1
+      - name: Collect MSIX
+        shell: pwsh
+        if: always()
+        run: |
+          New-Item -ItemType Directory -Path "out" -Force | Out-Null
+          $msixFile = Get-ChildItem -Path "build" -Filter "*.msix" -Recurse -ErrorAction SilentlyContinue | Select-Object -First 1
           if ($msixFile) {
             Copy-Item $msixFile.FullName "out\roxi-win-${{ github.event.inputs.version }}.msix"
             Copy-Item $msixFile.FullName "out\roxi-latest.msix"
-            Write-Host "MSIX created: $($msixFile.Name)"
+            Write-Host "MSIX collected: $($msixFile.Name) ($($msixFile.Length) bytes)"
           } else {
-            Write-Warning "MSIX file not found in build output, checking..."
-            Get-ChildItem -Path "build" -Recurse -Depth 3 | Where-Object { $_.Extension -match "msix|appx" }
+            Write-Warning "No MSIX file found, skipping MSIX packaging"
+          }
+
+          # Also copy the main exe as roxi-latest.exe for direct download
+          $exePath = "build\windows\x64\runner\Release\Roxi.exe"
+          if (Test-Path $exePath) {
+            Copy-Item $exePath "out\roxi-win-${{ github.event.inputs.version }}.exe"
+            Copy-Item $exePath "out\roxi-latest.exe"
+            Write-Host "EXE collected: Roxi.exe"
           }
 
           Write-Host "=== Output files ==="
           Get-ChildItem out/
 
       - name: Upload to R2
+        if: always()
         shell: bash
         env:
           AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
@@ -213,6 +228,17 @@ jobs:
               "s3://app-downloads/roxi-latest.zip" \
               --endpoint-url "$R2_EP" --content-type "application/zip"
             echo "ZIP uploaded: https://dl.roxi.cc/roxi-latest.zip"
+          fi
+
+          # Upload EXE
+          if [ -f "out/roxi-win-${{ github.event.inputs.version }}.exe" ]; then
+            aws s3 cp "out/roxi-win-${{ github.event.inputs.version }}.exe" \
+              "s3://app-downloads/roxi-win-${{ github.event.inputs.version }}.exe" \
+              --endpoint-url "$R2_EP" --content-type "application/x-msdownload"
+            aws s3 cp "out/roxi-latest.exe" \
+              "s3://app-downloads/roxi-latest.exe" \
+              --endpoint-url "$R2_EP" --content-type "application/x-msdownload"
+            echo "EXE uploaded: https://dl.roxi.cc/roxi-latest.exe"
           fi
 
           # Upload MSIX
