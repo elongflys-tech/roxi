@@ -29,6 +29,35 @@ class AppUpdateRepositoryImpl with ExceptionHandler, InfraLogger implements AppU
       if (!release.allowCustomUpdateChecker) {
         throw Exception("custom update checkers are not supported");
       }
+
+      // Primary: fetch from our own backend API (always up-to-date)
+      try {
+        final response = await httpClient.get<Map<String, dynamic>>(
+          "https://roxi.cc/api/app/version?platform=windows",
+        );
+        if (response.statusCode == 200 && response.data != null) {
+          final data = response.data!;
+          final version = data["latest_version"] as String? ?? "";
+          final versionCode = data["latest_version_code"] as int? ?? 0;
+          final downloadUrl = data["download_url"] as String? ?? Constants.githubLatestReleaseUrl;
+          if (version.isNotEmpty) {
+            loggy.info("Got version from backend API: $version ($versionCode)");
+            return right(RemoteVersionEntity(
+              version: version,
+              buildNumber: versionCode.toString(),
+              releaseTag: "v$version",
+              preRelease: false,
+              url: downloadUrl,
+              publishedAt: DateTime.now(),
+              flavor: Environment.prod,
+            ));
+          }
+        }
+      } catch (e) {
+        loggy.warning("Backend API version check failed, falling back to GitHub: $e");
+      }
+
+      // Fallback: fetch from GitHub Releases API
       final response = await httpClient.get<List>(Constants.githubReleasesApiUrl);
       if (response.statusCode != 200 || response.data == null) {
         loggy.warning("failed to fetch latest version info");
