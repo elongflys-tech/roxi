@@ -1,21 +1,17 @@
-display_name: Hiddify
-publisher_display_name: Hiddify
-identity_name: Hiddify.HiddifyNext
-msix_version: 4.1.2.0
+display_name: Roxi
+publisher_display_name: Roxi
+identity_name: CC.Roxi.App
+msix_version: 1.3.4.0
 logo_path: windows\runner\resources\app_icon.ico
 capabilities: internetClient, internetClientServer, privateNetworkClientServer
-languages: ar, en-us, es-es, fa-ir, fr-fr, id-id, pt-br, ru-ru, tr-tr, zh-cn, zh-tw
+languages: en-us, zh-cn, ru-ru, fa-ir
 protocol_activation: hiddify, v2ray, v2rayn, v2rayng, clash, clashmeta, sing-box
-execution_alias: hiddify
-certificate_path: windows\sign.pfx
+execution_alias: roxi
+# CI will generate and inject certificate_path at build time
+certificate_path:
 certificate_password:
-publisher: CN=8CB43675-F44B-4AA5-9372-E8727781BDC4
-install_certificate: "false"
+publisher: CN=Roxi, O=Roxi, C=US
+install_certificate: "true"
 enable_at_startup: "true"
 startup_task:
   parameters: --autostart
-
-# For testing with a self-signed certificate
-# publisher: CN=Hiddify-Test
-# certificate_password: "1234"
-# install_certificate: "true"
