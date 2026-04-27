@@ -70,7 +70,7 @@ jobs:
           EOF
 
       - name: Build APK
-        run: flutter build apk --release --split-per-abi --target-platform android-arm64
+        run: flutter build apk --release --split-per-abi --target-platform android-arm64 -t lib/main_prod.dart
 
       - name: Package APK
         run: |
