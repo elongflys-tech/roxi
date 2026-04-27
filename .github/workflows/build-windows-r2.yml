@@ -169,6 +169,7 @@ jobs:
           $config = $config -replace 'msix_version: .*', "msix_version: $version"
           $config = $config -replace 'certificate_path:.*', "certificate_path: windows\sign.pfx"
           $config = $config -replace 'certificate_password:.*', 'certificate_password: roxi-build-2026'
+          $config = $config -replace 'install_certificate:.*', 'install_certificate: "false"'
           Set-Content -Path $configPath -Value $config
 
           Write-Host "=== MSIX Config ==="
