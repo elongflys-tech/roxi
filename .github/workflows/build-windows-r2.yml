@@ -176,7 +176,7 @@ jobs:
 
           # Install msix_packer and build
           dart pub global activate msix
-          dart run msix:create --build-windows false
+          dart pub global run msix:create --build-windows false
 
           # Find and copy the MSIX file
           $msixFile = Get-ChildItem -Path "build" -Filter "*.msix" -Recurse | Select-Object -First 1
