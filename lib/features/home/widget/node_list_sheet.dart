@@ -539,7 +539,7 @@ class _AnimatedRefreshButton extends StatefulWidget {
 }
 
 class _AnimatedRefreshButtonState extends State<_AnimatedRefreshButton>
-    with SingleTickerProviderStateMixin {
+    with TickerProviderStateMixin {
   late final AnimationController _ctrl;
 
   @override
@@ -744,7 +744,7 @@ class _SwipeNodeTile extends StatefulWidget {
   State<_SwipeNodeTile> createState() => _SwipeNodeTileState();
 }
 
-class _SwipeNodeTileState extends State<_SwipeNodeTile> with SingleTickerProviderStateMixin {
+class _SwipeNodeTileState extends State<_SwipeNodeTile> with TickerProviderStateMixin {
   AnimationController? _animCtrl;
   Animation<Offset>? _slideAnim;
   bool _showActions = false;

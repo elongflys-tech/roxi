@@ -368,7 +368,7 @@ class _AnimatedRing extends StatefulWidget {
   State<_AnimatedRing> createState() => _AnimatedRingState();
 }
 
-class _AnimatedRingState extends State<_AnimatedRing> with SingleTickerProviderStateMixin {
+class _AnimatedRingState extends State<_AnimatedRing> with TickerProviderStateMixin {
   late AnimationController _ctrl;
 
   @override

@@ -7,7 +7,7 @@ class CircleDesignWidget extends StatefulWidget {
   _CircleDesignWidgetState createState() => _CircleDesignWidgetState();
 }
 
-class _CircleDesignWidgetState extends State<CircleDesignWidget> with SingleTickerProviderStateMixin {
+class _CircleDesignWidgetState extends State<CircleDesignWidget> with TickerProviderStateMixin {
   ConnectionStateStatus _currentState = ConnectionStateStatus.disconnected;
   late AnimationController _controller;
   late Animation<double> _animation;
