@@ -205,17 +205,36 @@ class ProxiesOverviewNotifier extends _$ProxiesOverviewNotifier with AppLogger {
     loggy.debug("changing proxy, group: [$groupTag] - outbound: [$outboundTag]");
     if (!state.hasValue) return;
     final outbounds = state.value!;
-    await ref.read(hapticServiceProvider.notifier).lightImpact();
-    await ref.read(proxyRepositoryProvider).selectProxy(groupTag, outboundTag).getOrElse((err) {
-      loggy.warning("error selecting outbound", err);
-      throw err;
-    }).run();
+
+    // Remember previous selection for rollback
+    final previousSelected = outbounds.selected;
+
+    // Optimistic UI update — show selection immediately
     final newselected = outbounds.items.where((e) => e.tag == outboundTag).firstOrNull;
     if (newselected != null) {
+      // Clear previous selection
+      for (final item in outbounds.items) {
+        item.isSelected = false;
+      }
       newselected.isSelected = true;
       outbounds.selected = newselected.tag;
       state = AsyncValue.data(outbounds);
     }
+
+    await ref.read(hapticServiceProvider.notifier).lightImpact();
+    final result = await ref.read(proxyRepositoryProvider).selectProxy(groupTag, outboundTag).run();
+    result.match(
+      (err) {
+        loggy.warning("error selecting outbound, rolling back", err);
+        // Rollback UI to previous selection
+        for (final item in outbounds.items) {
+          item.isSelected = item.tag == previousSelected;
+        }
+        outbounds.selected = previousSelected;
+        state = AsyncValue.data(outbounds);
+      },
+      (_) {},
+    );
   }
 
   Future<void> urlTest(String groupTag) async {

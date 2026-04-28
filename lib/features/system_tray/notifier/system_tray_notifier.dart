@@ -56,7 +56,8 @@ class SystemTrayNotifier extends _$SystemTrayNotifier with TrayListener, AppLogg
 
   Menu _trayMenu(ConnectionStatus connection, ServiceMode serviceMode, Translations t) => Menu(
     items: [
-      if (PlatformUtils.isLinux) ...[MenuItem(key: 'dashboard', label: t.common.dashboard), MenuItem.separator()],
+      MenuItem(key: 'dashboard', label: '显示 Roxi'),
+      MenuItem.separator(),
       MenuItem(
         key: 'connection',
         label: switch (connection) {
@@ -67,21 +68,10 @@ class SystemTrayNotifier extends _$SystemTrayNotifier with TrayListener, AppLogg
         },
         disabled: connection.isSwitching,
       ),
-      MenuItem.submenu(
-        label: t.pages.settings.inbound.serviceMode,
-        icon: Assets.images.trayIconIco,
-        submenu: Menu(
-          items: [
-            ...ServiceMode.values.map(
-              (e) => MenuItem.checkbox(checked: e == serviceMode, key: e.name, label: e.present(t)),
-            ),
-          ],
-        ),
-      ),
       MenuItem.separator(),
       MenuItem(key: 'renew', label: '⭐ 续费会员'),
       MenuItem.separator(),
-      MenuItem(key: 'quit', label: t.common.quit),
+      MenuItem(key: 'quit', label: '退出 Roxi'),
     ],
   );
 
@@ -156,12 +146,12 @@ class SystemTrayNotifier extends _$SystemTrayNotifier with TrayListener, AppLogg
 
   @override
   Future<void> onTrayIconMouseDown() async {
-    // if (Platform.isMacOS) {
-    //   await trayManager.popUpContextMenu();
-    // } else {
-    //   await ref.read(windowNotifierProvider.notifier).hideOrShow();
-    // }
-    await ref.read(windowNotifierProvider.notifier).showOrHide();
+    if (Platform.isMacOS) {
+      // macOS convention: left-click on menu bar icon shows the menu
+      await trayManager.popUpContextMenu();
+    } else {
+      await ref.read(windowNotifierProvider.notifier).showOrHide();
+    }
   }
 
   @override

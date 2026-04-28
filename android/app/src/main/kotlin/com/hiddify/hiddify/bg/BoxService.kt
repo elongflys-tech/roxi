@@ -60,7 +60,7 @@ class BoxService(
         private lateinit var workingDir: File
         private fun initialize() {
             System.setProperty("GODEBUG", "efence=1,stacktraceback=2");
-            System.setProperty("GOGC", "off");
+            System.setProperty("GOGC", "100");
             if (initializeOnce) return
             val baseDir = Application.application.filesDir
 

@@ -334,7 +334,7 @@ class HiddifyCoreService with InfraLogger {
       try {
         final res = await core.bgClient.selectOutbound(
           SelectOutboundRequest(groupTag: groupTag, outboundTag: outboundTag),
-          options: CallOptions(timeout: const Duration(seconds: 1)),
+          options: CallOptions(timeout: const Duration(seconds: 5)),
         );
         if (res.code != ResponseCode.OK) return left("${res.code} ${res.message}");
 

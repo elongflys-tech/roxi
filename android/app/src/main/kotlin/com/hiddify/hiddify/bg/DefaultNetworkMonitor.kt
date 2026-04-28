@@ -52,15 +52,15 @@ object DefaultNetworkMonitor {
             val interfaceName =
                 (Application.connectivity.getLinkProperties(newNetwork) ?: return).interfaceName
             for (times in 0 until 10) {
-                var interfaceIndex: Int
                 try {
-                    interfaceIndex = NetworkInterface.getByName(interfaceName).index
+                    val interfaceIndex = NetworkInterface.getByName(interfaceName).index
+                    listener.updateDefaultInterface(interfaceName, interfaceIndex, false, false)
+                    return
                 } catch (e: Exception) {
                     Thread.sleep(100)
-                    continue
                 }
-                listener.updateDefaultInterface(interfaceName, interfaceIndex, false, false)
             }
+            listener.updateDefaultInterface("", -1, false, false)
         } else {
             listener.updateDefaultInterface("", -1, false, false)
         }
