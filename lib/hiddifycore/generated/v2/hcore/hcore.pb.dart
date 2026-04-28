@@ -2055,6 +2055,61 @@ class SetSystemProxyEnabledRequest extends $pb.GeneratedMessage {
   void clearIsEnabled() => clearField(1);
 }
 
+class ParseOutboundsRequest extends $pb.GeneratedMessage {
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(const $core.bool.fromEnvironment('protobuf.omit_message_names') ? '' : 'ParseOutboundsRequest', package: const $pb.PackageName(const $core.bool.fromEnvironment('protobuf.omit_message_names') ? '' : 'hcore'), createEmptyInstance: create)
+    ..aOS(1, const $core.bool.fromEnvironment('protobuf.omit_field_names') ? '' : 'configPath')
+    ..aOS(2, const $core.bool.fromEnvironment('protobuf.omit_field_names') ? '' : 'configContent')
+    ..hasRequiredFields = false
+  ;
+
+  ParseOutboundsRequest._() : super();
+  factory ParseOutboundsRequest({
+    $core.String? configPath,
+    $core.String? configContent,
+  }) {
+    final _result = create();
+    if (configPath != null) {
+      _result.configPath = configPath;
+    }
+    if (configContent != null) {
+      _result.configContent = configContent;
+    }
+    return _result;
+  }
+  factory ParseOutboundsRequest.fromBuffer($core.List<$core.int> i, [$pb.ExtensionRegistry r = $pb.ExtensionRegistry.EMPTY]) => create()..mergeFromBuffer(i, r);
+  factory ParseOutboundsRequest.fromJson($core.String i, [$pb.ExtensionRegistry r = $pb.ExtensionRegistry.EMPTY]) => create()..mergeFromJson(i, r);
+  @$core.Deprecated('Will be removed in next major version')
+  ParseOutboundsRequest clone() => ParseOutboundsRequest()..mergeFromMessage(this);
+  @$core.Deprecated('Will be removed in next major version')
+  ParseOutboundsRequest copyWith(void Function(ParseOutboundsRequest) updates) => super.copyWith((message) => updates(message as ParseOutboundsRequest)) as ParseOutboundsRequest;
+  $pb.BuilderInfo get info_ => _i;
+  @$core.pragma('dart2js:noInline')
+  static ParseOutboundsRequest create() => ParseOutboundsRequest._();
+  ParseOutboundsRequest createEmptyInstance() => create();
+  static $pb.PbList<ParseOutboundsRequest> createRepeated() => $pb.PbList<ParseOutboundsRequest>();
+  @$core.pragma('dart2js:noInline')
+  static ParseOutboundsRequest getDefault() => _defaultInstance ??= $pb.GeneratedMessage.$_defaultFor<ParseOutboundsRequest>(create);
+  static ParseOutboundsRequest? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $core.String get configPath => $_getSZ(0);
+  @$pb.TagNumber(1)
+  set configPath($core.String v) { $_setString(0, v); }
+  @$pb.TagNumber(1)
+  $core.bool hasConfigPath() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearConfigPath() => clearField(1);
+
+  @$pb.TagNumber(2)
+  $core.String get configContent => $_getSZ(1);
+  @$pb.TagNumber(2)
+  set configContent($core.String v) { $_setString(1, v); }
+  @$pb.TagNumber(2)
+  $core.bool hasConfigContent() => $_has(1);
+  @$pb.TagNumber(2)
+  void clearConfigContent() => clearField(2);
+}
+
 class LogMessage extends $pb.GeneratedMessage {
   static final $pb.BuilderInfo _i = $pb.BuilderInfo(const $core.bool.fromEnvironment('protobuf.omit_message_names') ? '' : 'LogMessage', package: const $pb.PackageName(const $core.bool.fromEnvironment('protobuf.omit_message_names') ? '' : 'hcore'), createEmptyInstance: create)
     ..e<LogLevel>(1, const $core.bool.fromEnvironment('protobuf.omit_field_names') ? '' : 'level', $pb.PbFieldType.OE, defaultOrMaker: LogLevel.TRACE, valueOf: LogLevel.valueOf, enumValues: LogLevel.values)

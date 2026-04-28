@@ -101,6 +101,27 @@ class NodeListPage extends HookConsumerWidget {
 
     final activeProfile = ref.watch(activeProfileProvider).valueOrNull;
 
+    // Watch the update state to drive refresh animation
+    final updateState = (activeProfile != null)
+        ? ref.watch(updateProfileNotifierProvider(activeProfile.id))
+        : const AsyncData<Unit?>(null);
+    final isRefreshing = updateState.isLoading;
+    // Track "just succeeded" to show the ✓ overlay briefly
+    final showSuccess = useState(false);
+    ref.listen(
+      activeProfile != null
+          ? updateProfileNotifierProvider(activeProfile.id)
+          : updateProfileNotifierProvider(''),
+      (prev, next) {
+        if (prev?.isLoading == true && next.hasValue && next.value != null) {
+          showSuccess.value = true;
+          Future.delayed(const Duration(milliseconds: 1200), () {
+            if (context.mounted) showSuccess.value = false;
+          });
+        }
+      },
+    );
+
     return Scaffold(
       appBar: AppBar(
         leading: IconButton(
@@ -112,39 +133,36 @@ class NodeListPage extends HookConsumerWidget {
         elevation: 0,
         scrolledUnderElevation: 0,
         actions: [
-          // URL test (speed test all nodes)
-          if (isConnected)
-            IconButton(
-              icon: const Icon(Icons.flash_on_rounded, size: 22),
-              tooltip: '测速',
-              onPressed: () => ref.read(proxiesOverviewNotifierProvider.notifier).urlTest("select"),
-            ),
-          // Refresh subscription
           if (isConnected && activeProfile != null && activeProfile is RemoteProfileEntity)
-            IconButton(
-              icon: const Icon(Icons.refresh_rounded, size: 22),
-              tooltip: '刷新订阅',
+            _AnimatedRefreshButton(
+              isRefreshing: isRefreshing,
               onPressed: () {
                 ref.read(updateProfileNotifierProvider(activeProfile.id).notifier)
                     .updateProfile(activeProfile as RemoteProfileEntity);
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('正在刷新订阅...'), duration: Duration(seconds: 2)),
-                );
               },
             ),
         ],
       ),
       body: SafeArea(
         top: false,
-        child: !expiryChecked.value
-          ? const Center(child: CircularProgressIndicator())
-          : _ConnectedNodeList(
-              proxiesAsync: proxiesAsync,
-              activeProxy: activeProxy,
-              isExpired: isExpired.value,
-              userTier: userTier.value,
-              isConnected: isConnected,
-            ),
+        child: Stack(
+          children: [
+            !expiryChecked.value
+                ? const Center(child: CircularProgressIndicator())
+                : _ConnectedNodeList(
+                    proxiesAsync: proxiesAsync,
+                    activeProxy: activeProxy,
+                    isExpired: isExpired.value,
+                    userTier: userTier.value,
+                    isConnected: isConnected,
+                  ),
+            // Center overlay — "更新中..." / "✓ 成功"
+            if (isRefreshing || showSuccess.value)
+              Center(
+                child: _RefreshOverlay(isSuccess: showSuccess.value),
+              ),
+          ],
+        ),
       ),
     );
   }
@@ -204,6 +222,25 @@ class NodeListTabPage extends HookConsumerWidget {
 
     final activeProfile = ref.watch(activeProfileProvider).valueOrNull;
 
+    final updateState = (activeProfile != null)
+        ? ref.watch(updateProfileNotifierProvider(activeProfile.id))
+        : const AsyncData<Unit?>(null);
+    final isRefreshing = updateState.isLoading;
+    final showSuccess = useState(false);
+    ref.listen(
+      activeProfile != null
+          ? updateProfileNotifierProvider(activeProfile.id)
+          : updateProfileNotifierProvider(''),
+      (prev, next) {
+        if (prev?.isLoading == true && next.hasValue && next.value != null) {
+          showSuccess.value = true;
+          Future.delayed(const Duration(milliseconds: 1200), () {
+            if (context.mounted) showSuccess.value = false;
+          });
+        }
+      },
+    );
+
     return Scaffold(
       appBar: AppBar(
         automaticallyImplyLeading: false,
@@ -212,37 +249,35 @@ class NodeListTabPage extends HookConsumerWidget {
         elevation: 0,
         scrolledUnderElevation: 0,
         actions: [
-          if (isConnected)
-            IconButton(
-              icon: const Icon(Icons.flash_on_rounded, size: 22),
-              tooltip: '测速',
-              onPressed: () => ref.read(proxiesOverviewNotifierProvider.notifier).urlTest("select"),
-            ),
           if (isConnected && activeProfile != null && activeProfile is RemoteProfileEntity)
-            IconButton(
-              icon: const Icon(Icons.refresh_rounded, size: 22),
-              tooltip: '刷新订阅',
+            _AnimatedRefreshButton(
+              isRefreshing: isRefreshing,
               onPressed: () {
                 ref.read(updateProfileNotifierProvider(activeProfile.id).notifier)
                     .updateProfile(activeProfile as RemoteProfileEntity);
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('正在刷新订阅...'), duration: Duration(seconds: 2)),
-                );
               },
             ),
         ],
       ),
       body: SafeArea(
         top: false,
-        child: !expiryChecked.value
-          ? const Center(child: CircularProgressIndicator())
-          : _ConnectedNodeList(
-              proxiesAsync: proxiesAsync,
-              activeProxy: activeProxy,
-              isExpired: isExpired.value,
-              userTier: userTier.value,
-              isConnected: isConnected,
-            ),
+        child: Stack(
+          children: [
+            !expiryChecked.value
+                ? const Center(child: CircularProgressIndicator())
+                : _ConnectedNodeList(
+                    proxiesAsync: proxiesAsync,
+                    activeProxy: activeProxy,
+                    isExpired: isExpired.value,
+                    userTier: userTier.value,
+                    isConnected: isConnected,
+                  ),
+            if (isRefreshing || showSuccess.value)
+              Center(
+                child: _RefreshOverlay(isSuccess: showSuccess.value),
+              ),
+          ],
+        ),
       ),
     );
   }
@@ -301,8 +336,6 @@ class _ConnectedNodeList extends HookConsumerWidget {
     final s = AuthI18n.t;
 
     final showcaseNodes = useState<List<Map<String, dynamic>>>([]);
-    // Guard: only auto-connect once per page lifecycle
-    final hasAutoConnected = useState(false);
 
     useEffect(() {
       () async {
@@ -318,50 +351,27 @@ class _ConnectedNodeList extends HookConsumerWidget {
         final realNodes = (group?.items ?? []).where((n) => !n.isGroup && n.tag.isNotEmpty).toList();
 
         if (realNodes.isEmpty) {
-          // Auto-connect once if not connected — nodes will appear after connection
-          if (!isConnected && !hasAutoConnected.value) {
-            hasAutoConnected.value = true;
-            Future.microtask(() {
-              ref.read(connectionNotifierProvider.notifier).toggleConnection();
-            });
-            return Center(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const CircularProgressIndicator(),
-                  const SizedBox(height: 16),
-                  Text(s['connectFirst'] ?? '正在连接，请稍候...'),
-                ],
-              ),
-            );
-          }
-          // Already tried auto-connect or currently connecting — just show loading
-          if (!isConnected) {
-            return Center(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const CircularProgressIndicator(),
-                  const SizedBox(height: 16),
-                  Text(s['connectFirst'] ?? '正在连接，请稍候...'),
-                ],
-              ),
-            );
-          }
+          // No nodes at all (no cache, no live data) — show connect prompt
           return Center(
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                const CircularProgressIndicator(),
+                Icon(Icons.public_rounded, size: 48, color: Theme.of(context).colorScheme.primary.withOpacity(0.4)),
                 const SizedBox(height: 16),
-                Text(s['connectFirst'] ?? '正在加载节点...'),
+                Text(s['connectFirst'] ?? '请先连接以加载节点'),
+                const SizedBox(height: 16),
+                if (!isConnected)
+                  FilledButton.icon(
+                    onPressed: () => ref.read(connectionNotifierProvider.notifier).toggleConnection(),
+                    icon: const Icon(Icons.power_settings_new_rounded, size: 18),
+                    label: Text(s['oneClickConnect'] ?? '一键连接'),
+                  )
+                else
+                  const CircularProgressIndicator(),
               ],
             ),
           );
         }
-
-        // Successfully got nodes — reset the guard so re-entering the page can auto-connect again
-        if (hasAutoConnected.value) hasAutoConnected.value = false;
 
         // Group by country
         final grouped = <String, List<OutboundInfo>>{};
@@ -384,76 +394,317 @@ class _ConnectedNodeList extends HookConsumerWidget {
           });
         final activeTag = activeProxy?.tag ?? '';
 
-        return ListView(
+        // Build a flat list of items for ListView.builder (lazy rendering).
+        // Each item is either a header, a node tile, or the connectivity test tile.
+        final flatItems = <_ListItem>[];
+        if (isConnected) {
+          flatItems.add(const _ListItem.connectivityTest());
+        }
+        for (final country in sortedCountries) {
+          final countryNodes = grouped[country]!;
+          flatItems.add(_ListItem.header(country, countryNodes.length));
+          for (final node in countryNodes) {
+            flatItems.add(_ListItem.node(node));
+          }
+        }
+
+        return ListView.builder(
           padding: const EdgeInsets.symmetric(vertical: 8),
-          children: [
-            ...sortedCountries.expand((country) {
-              final countryNodes = grouped[country]!;
-              return [
-                _SectionHeader(
-                  label: country,
-                  count: countryNodes.length,
+          itemCount: flatItems.length,
+          itemBuilder: (context, index) {
+            final item = flatItems[index];
+            switch (item.type) {
+              case _ListItemType.connectivityTest:
+                return _ConnectivityTestTile(
+                  onTest: () => ref.read(proxiesOverviewNotifierProvider.notifier).urlTest("select"),
+                );
+              case _ListItemType.header:
+                return _SectionHeader(
+                  label: item.headerLabel!,
+                  count: item.headerCount!,
                   color: Colors.green,
                   locked: false,
-                ),
-                ...countryNodes.map((node) {
-                  final selected = node.tag == activeTag;
-                  final delay = node.urlTestDelay;
-                  final cc = NodeListCard.inferCountryCode(node.tagDisplay, node.ipinfo.countryCode);
-                  return _SwipeNodeTile(
-                    key: ValueKey(node.tag),
-                    flagWidget: IPCountryFlag(countryCode: cc, organization: node.ipinfo.org, size: 28),
-                    title: NodeListCard.cleanTag(node.tagDisplay),
-                    subtitle: '${node.type}',
-                    delay: delay,
-                    isSelected: selected,
-                    locked: false,
-                    onDoubleTap: () async {
-                      if (!selected && group != null) {
-                        await ref.read(proxiesOverviewNotifierProvider.notifier)
-                            .changeProxy(group.tag, node.tag);
-                      }
-                    },
-                    onTest: () async {
-                      if (group != null) {
-                        await ref.read(proxiesOverviewNotifierProvider.notifier)
-                            .urlTest(group.tag);
-                      }
-                    },
-                    onCopy: () {
-                      Clipboard.setData(ClipboardData(text: node.tag));
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(content: Text('已复制: ${node.tag}'), duration: const Duration(seconds: 1)),
-                      );
-                    },
-                    onInfo: () => _showNodeInfo(context, node),
-                  );
-                }),
-              ];
-            }),
-          ],
+                );
+              case _ListItemType.node:
+                final node = item.nodeInfo!;
+                final selected = node.tag == activeTag;
+                final delay = node.urlTestDelay;
+                final cc = NodeListCard.inferCountryCode(node.tagDisplay, node.ipinfo.countryCode);
+                return _SwipeNodeTile(
+                  key: ValueKey(node.tag),
+                  flagWidget: IPCountryFlag(countryCode: cc, organization: node.ipinfo.org, size: 28),
+                  title: NodeListCard.cleanTag(node.tagDisplay),
+                  subtitle: '${node.type}',
+                  delay: delay,
+                  isSelected: selected,
+                  locked: false,
+                  onTap: () {
+                    if (!isConnected) {
+                      // Not connected — start connection first. Once connected,
+                      // the provider rebuilds with live data and the user can
+                      // select a node.
+                      ref.read(connectionNotifierProvider.notifier).toggleConnection();
+                      return;
+                    }
+                    if (!selected && group != null) {
+                      ref.read(proxiesOverviewNotifierProvider.notifier)
+                          .changeProxy(group.tag, node.tag);
+                    }
+                  },
+                  onTest: isConnected
+                      ? () {
+                          if (group != null) {
+                            ref.read(proxiesOverviewNotifierProvider.notifier)
+                                .urlTest(group.tag);
+                          }
+                        }
+                      : null,
+                  onCopy: () {
+                    Clipboard.setData(ClipboardData(text: node.tag));
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text('已复制: ${node.tag}'), duration: const Duration(seconds: 1)),
+                    );
+                  },
+                  onInfo: () => _showNodeInfo(context, node),
+                );
+            }
+          },
         );
       },
       error: (_, __) {
-        // Auto-connect once on error (sing-box not running)
-        if (!isConnected && !hasAutoConnected.value) {
-          hasAutoConnected.value = true;
-          Future.microtask(() {
-            ref.read(connectionNotifierProvider.notifier).toggleConnection();
-          });
-        }
+        // No live data and no cache — show connect prompt
         return Center(
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const CircularProgressIndicator(),
+              Icon(Icons.public_rounded, size: 48, color: Theme.of(context).colorScheme.primary.withOpacity(0.4)),
               const SizedBox(height: 16),
-              Text(s['connectFirst'] ?? '正在连接，请稍候...'),
+              Text(s['connectFirst'] ?? '请先连接以加载节点'),
+              const SizedBox(height: 16),
+              if (!isConnected)
+                FilledButton.icon(
+                  onPressed: () => ref.read(connectionNotifierProvider.notifier).toggleConnection(),
+                  icon: const Icon(Icons.power_settings_new_rounded, size: 18),
+                  label: Text(s['oneClickConnect'] ?? '一键连接'),
+                )
+              else
+                const CircularProgressIndicator(),
             ],
           ),
         );
       },
       loading: () => const Center(child: CircularProgressIndicator()),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Flat list item model for ListView.builder
+// ─────────────────────────────────────────────────────────────────────────────
+enum _ListItemType { connectivityTest, header, node }
+
+class _ListItem {
+  final _ListItemType type;
+  final String? headerLabel;
+  final int? headerCount;
+  final OutboundInfo? nodeInfo;
+
+  const _ListItem.connectivityTest()
+      : type = _ListItemType.connectivityTest,
+        headerLabel = null,
+        headerCount = null,
+        nodeInfo = null;
+
+  const _ListItem.header(this.headerLabel, this.headerCount)
+      : type = _ListItemType.header,
+        nodeInfo = null;
+
+  _ListItem.node(this.nodeInfo)
+      : type = _ListItemType.node,
+        headerLabel = null,
+        headerCount = null;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Animated refresh button — blue icon that spins while refreshing
+// ─────────────────────────────────────────────────────────────────────────────
+class _AnimatedRefreshButton extends StatefulWidget {
+  final bool isRefreshing;
+  final VoidCallback onPressed;
+  const _AnimatedRefreshButton({required this.isRefreshing, required this.onPressed});
+
+  @override
+  State<_AnimatedRefreshButton> createState() => _AnimatedRefreshButtonState();
+}
+
+class _AnimatedRefreshButtonState extends State<_AnimatedRefreshButton>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _ctrl;
+
+  @override
+  void initState() {
+    super.initState();
+    _ctrl = AnimationController(vsync: this, duration: const Duration(milliseconds: 800));
+    if (widget.isRefreshing) _ctrl.repeat();
+  }
+
+  @override
+  void didUpdateWidget(covariant _AnimatedRefreshButton old) {
+    super.didUpdateWidget(old);
+    if (widget.isRefreshing && !_ctrl.isAnimating) {
+      _ctrl.repeat();
+    } else if (!widget.isRefreshing && _ctrl.isAnimating) {
+      // Finish the current rotation then stop
+      _ctrl.forward().then((_) { if (mounted) _ctrl.reset(); });
+    }
+  }
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final color = Theme.of(context).colorScheme.primary;
+    return IconButton(
+      tooltip: '刷新订阅',
+      onPressed: widget.isRefreshing ? null : widget.onPressed,
+      icon: RotationTransition(
+        turns: _ctrl,
+        child: Icon(Icons.refresh_rounded, size: 22, color: color),
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Center overlay — "更新中..." spinner or "✓ 成功" checkmark
+// ─────────────────────────────────────────────────────────────────────────────
+class _RefreshOverlay extends StatelessWidget {
+  final bool isSuccess;
+  const _RefreshOverlay({required this.isSuccess});
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedSwitcher(
+      duration: const Duration(milliseconds: 250),
+      child: Container(
+        key: ValueKey(isSuccess),
+        padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 24),
+        decoration: BoxDecoration(
+          color: Theme.of(context).colorScheme.surface,
+          borderRadius: BorderRadius.circular(16),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.08),
+              blurRadius: 20,
+              offset: const Offset(0, 4),
+            ),
+          ],
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: isSuccess
+              ? [
+                  const Icon(Icons.check_rounded, size: 36, color: Colors.black87),
+                  const SizedBox(height: 10),
+                  Text('成功', style: Theme.of(context).textTheme.bodyMedium),
+                ]
+              : [
+                  const SizedBox(
+                    width: 32,
+                    height: 32,
+                    child: CircularProgressIndicator(strokeWidth: 2.5),
+                  ),
+                  const SizedBox(height: 12),
+                  Text('更新中...', style: Theme.of(context).textTheme.bodyMedium),
+                ],
+        ),
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Connectivity test tile — Shadowrocket style
+// Speedometer icon on left, "连通性测试" label, circled "T" button on right.
+// ─────────────────────────────────────────────────────────────────────────────
+class _ConnectivityTestTile extends StatefulWidget {
+  final Future<void> Function() onTest;
+  const _ConnectivityTestTile({required this.onTest});
+
+  @override
+  State<_ConnectivityTestTile> createState() => _ConnectivityTestTileState();
+}
+
+class _ConnectivityTestTileState extends State<_ConnectivityTestTile> {
+  bool _testing = false;
+
+  Future<void> _runTest() async {
+    if (_testing) return;
+    setState(() => _testing = true);
+    try {
+      await widget.onTest();
+      // The Go RPC returns immediately (testing is async), so hold the
+      // spinner for a few seconds so the user sees feedback while results
+      // stream in.
+      await Future.delayed(const Duration(seconds: 3));
+    } finally {
+      if (mounted) setState(() => _testing = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surfaceContainerHighest.withOpacity(0.35),
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: ListTile(
+        dense: true,
+        contentPadding: const EdgeInsets.symmetric(horizontal: 14),
+        leading: Icon(
+          Icons.speed_rounded,
+          color: theme.colorScheme.primary,
+          size: 24,
+        ),
+        title: Text(
+          '连通性测试',
+          style: theme.textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w500),
+        ),
+        trailing: _testing
+            ? const SizedBox(
+                width: 20,
+                height: 20,
+                child: CircularProgressIndicator(strokeWidth: 2),
+              )
+            : GestureDetector(
+                onTap: _runTest,
+                child: Container(
+                  width: 28,
+                  height: 28,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    border: Border.all(color: theme.colorScheme.primary, width: 1.5),
+                  ),
+                  alignment: Alignment.center,
+                  child: Text(
+                    'T',
+                    style: TextStyle(
+                      color: theme.colorScheme.primary,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+              ),
+        onTap: _runTest,
+      ),
     );
   }
 }
@@ -469,7 +720,7 @@ class _SwipeNodeTile extends StatefulWidget {
   final int delay;
   final bool isSelected;
   final bool locked;
-  final VoidCallback onDoubleTap;
+  final VoidCallback onTap;
   final VoidCallback? onTest;
   final VoidCallback? onCopy;
   final VoidCallback? onInfo;
@@ -482,7 +733,7 @@ class _SwipeNodeTile extends StatefulWidget {
     required this.delay,
     required this.isSelected,
     this.locked = false,
-    required this.onDoubleTap,
+    required this.onTap,
     this.onTest,
     this.onCopy,
     this.onInfo,
@@ -493,34 +744,34 @@ class _SwipeNodeTile extends StatefulWidget {
 }
 
 class _SwipeNodeTileState extends State<_SwipeNodeTile> with SingleTickerProviderStateMixin {
-  late final AnimationController _animCtrl;
-  late Animation<Offset> _slideAnim;
+  AnimationController? _animCtrl;
+  Animation<Offset>? _slideAnim;
   bool _showActions = false;
-  static const _actionWidth = 140.0; // total width of action buttons
 
-  @override
-  void initState() {
-    super.initState();
-    _animCtrl = AnimationController(vsync: this, duration: const Duration(milliseconds: 200));
-    _slideAnim = Tween<Offset>(begin: Offset.zero, end: const Offset(-140, 0))
-        .animate(CurvedAnimation(parent: _animCtrl, curve: Curves.easeOut));
+  AnimationController _ensureController() {
+    if (_animCtrl == null) {
+      _animCtrl = AnimationController(vsync: this, duration: const Duration(milliseconds: 200));
+      _slideAnim = Tween<Offset>(begin: Offset.zero, end: const Offset(-140, 0))
+          .animate(CurvedAnimation(parent: _animCtrl!, curve: Curves.easeOut));
+    }
+    return _animCtrl!;
   }
 
   @override
   void dispose() {
-    _animCtrl.dispose();
+    _animCtrl?.dispose();
     super.dispose();
   }
 
   void _open() {
     if (_showActions) return;
     setState(() => _showActions = true);
-    _animCtrl.forward();
+    _ensureController().forward();
   }
 
   void _close() {
     if (!_showActions) return;
-    _animCtrl.reverse().then((_) {
+    _animCtrl?.reverse().then((_) {
       if (mounted) setState(() => _showActions = false);
     });
   }
@@ -542,12 +793,13 @@ class _SwipeNodeTileState extends State<_SwipeNodeTile> with SingleTickerProvide
           _close(); // swipe right → hide actions
         }
       },
-      onDoubleTap: () {
-        _close();
-        widget.onDoubleTap();
-      },
+      // Single tap: if actions are open close them, otherwise switch node
       onTap: () {
-        if (_showActions) _close();
+        if (_showActions) {
+          _close();
+        } else {
+          widget.onTap();
+        }
       },
       child: SizedBox(
         height: 60,
@@ -574,9 +826,9 @@ class _SwipeNodeTileState extends State<_SwipeNodeTile> with SingleTickerProvide
               ),
             // Foreground tile
             AnimatedBuilder(
-              animation: _slideAnim,
+              animation: _slideAnim ?? const AlwaysStoppedAnimation(Offset.zero),
               builder: (_, child) => Transform.translate(
-                offset: _slideAnim.value,
+                offset: _slideAnim?.value ?? Offset.zero,
                 child: child,
               ),
               child: Container(
@@ -913,7 +1165,7 @@ class _ShowcaseFallback extends HookWidget {
             delay: 0,
             isSelected: false,
             locked: locked,
-            onDoubleTap: locked ? () => showPlansSheet(context) : onConnect,
+            onTap: locked ? () => showPlansSheet(context) : onConnect,
             onTest: null,
             onCopy: null,
             onInfo: null,

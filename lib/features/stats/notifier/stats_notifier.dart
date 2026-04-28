@@ -4,6 +4,7 @@ import 'package:hiddify/hiddifycore/generated/v2/hcore/hcore.pb.dart';
 import 'package:hiddify/utils/custom_loggers.dart';
 import 'package:hiddify/utils/riverpod_utils.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
+import 'package:rxdart/rxdart.dart';
 
 part 'stats_notifier.g.dart';
 
@@ -17,6 +18,7 @@ class StatsNotifier extends _$StatsNotifier with AppLogger {
       yield* ref
           .watch(statsRepositoryProvider)
           .watchStats()
+          .throttleTime(const Duration(milliseconds: 500), leading: true, trailing: true)
           .map((event) => event.getOrElse((_) => SystemInfo.create()));
     } else {
       yield* Stream.value(SystemInfo.create());

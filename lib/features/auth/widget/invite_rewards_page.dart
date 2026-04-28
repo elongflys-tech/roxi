@@ -307,6 +307,7 @@ void _shareInvite(BuildContext context, String inviteCode) {
           '免费注册，一键连接，安全稳定。\n\n'
           '📥 下载：https://dl.roxi.cc/roxi-latest.apk\n'
           '📢 群组：https://t.me/Roxifree\n\n'
+          '🔗 邀请链接：https://roxi.cc/$inviteCode\n'
           '注册时填我的邀请码：$inviteCode\n'
           '好友充值，你获得 30% 佣金奖励！可提现！';
 

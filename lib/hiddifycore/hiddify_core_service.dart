@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:collection';
 import 'dart:convert';
 import 'dart:math';
 
@@ -283,15 +284,16 @@ class HiddifyCoreService with InfraLogger {
       return;
     }
     try {
-      yield* core.bgClient.outboundsInfo(Empty()).map((event) => event.items.isEmpty ? null : event.items.first);
+      // Emit the first event immediately, then throttle subsequent updates to
+      // avoid excessive UI rebuilds when many outbound changes arrive at once.
+      yield* core.bgClient
+          .outboundsInfo(Empty())
+          .throttleTime(const Duration(seconds: 2), leading: true, trailing: true)
+          .map((event) => event.items.isEmpty ? null : event.items.first);
     } catch (e) {
       loggy.error("error watching group: $e");
       rethrow;
     }
-    // //emitting first event immediately
-    // yield* core.bgClient.outboundsInfo(Empty()).take(1).map((event) => event.items.isEmpty ? null : event.items.first);
-    // //emitting other event after every 4 seconds(latest event)
-    // yield* core.bgClient.outboundsInfo(Empty()).throttleTime(const Duration(seconds: 4), leading: false, trailing: true).map((event) => event.items.isEmpty ? null : event.items.first);
   }
 
   Stream<List<OutboundGroup>> watchActiveGroups() async* {
@@ -305,6 +307,7 @@ class HiddifyCoreService with InfraLogger {
     try {
       yield* core.bgClient
           .mainOutboundsInfo(Empty())
+          .throttleTime(const Duration(seconds: 2), leading: true, trailing: true)
           .map((event) {
             return latest = event.items;
           })
@@ -325,6 +328,26 @@ class HiddifyCoreService with InfraLogger {
     } catch (e) {
       loggy.error("error watching stats: $e");
       rethrow;
+    }
+  }
+
+  /// Parse a subscription config file and return the outbound list without
+  /// starting sing-box.  Uses the foreground gRPC client which is always
+  /// available after setup().
+  Future<OutboundGroupList?> parseOutbounds(String configPath) async {
+    if (!core.isInitialized()) {
+      loggy.debug("core is not initialized, cannot parse outbounds");
+      return null;
+    }
+    try {
+      final res = await core.fgClient.parseOutbounds(
+        ParseOutboundsRequest(configPath: configPath),
+        options: CallOptions(timeout: const Duration(seconds: 10)),
+      );
+      return res;
+    } catch (e) {
+      loggy.error("error parsing outbounds offline: $e");
+      return null;
     }
   }
 
@@ -361,7 +384,11 @@ class HiddifyCoreService with InfraLogger {
     });
   }
 
-  List<LogMessage> logBuffer = [];
+  List<LogMessage> get logBuffer => _logRing.toList();
+  final Queue<LogMessage> _logRing = Queue<LogMessage>();
+  static const _maxLogBuffer = 300;
+  Timer? _logFlushTimer;
+  DateTime? _logFlushDeadline;
 
   // SingboxConfigOption? latestOptions;
 
@@ -400,9 +427,9 @@ class HiddifyCoreService with InfraLogger {
   TaskEither<String, Unit> clearLogs() {
     return TaskEither(() async {
       loggy.debug("clearing logs");
-      logBuffer.clear();
-      // final res = await core.bgClient(Empty());
-      // if (res.code != ResponseCode.OK) return left("${res.code} ${res.message}");
+      _logRing.clear();
+      _logFlushTimer?.cancel();
+      _logFlushDeadline = null;
       return right(unit);
     });
   }
@@ -477,16 +504,32 @@ class HiddifyCoreService with InfraLogger {
     final logLevel = ref.read(ConfigOptions.logLevel);
     final coreLogLevel = getCoreLogLevel(logLevel);
     final listenKey = "${key}LogListener";
-    // await stopListenSingle(listenKey);
     await listenSingle<LogMessage>(listenKey, () {
       return cc.logListener(LogRequest(level: coreLogLevel), options: grpcOptions).map((event) {
-        // Handle incoming event
-        logBuffer.add(event);
-        if (logBuffer.length > 300) {
-          logBuffer.removeAt(0);
+        // Append to ring buffer (O(1) removal from front).
+        _logRing.add(event);
+        while (_logRing.length > _maxLogBuffer) {
+          _logRing.removeFirst();
         }
-        logController.add(logBuffer);
-        // loggy.log(getLogLevel(event.level), event.message);
+        // Debounce with a hard deadline: reset the timer on every event to
+        // batch logs, but force a flush after 500 ms max to avoid starving
+        // the UI when logs arrive in a continuous stream.
+        final now = DateTime.now();
+        _logFlushDeadline ??= now.add(const Duration(milliseconds: 500));
+        _logFlushTimer?.cancel();
+        final remaining = _logFlushDeadline!.difference(now);
+        if (remaining.isNegative || remaining == Duration.zero) {
+          // Hard deadline reached — flush immediately.
+          _logFlushDeadline = null;
+          logController.add(_logRing.toList());
+        } else {
+          // Schedule a flush; use the shorter of 200 ms debounce or remaining deadline.
+          final delay = remaining < const Duration(milliseconds: 200) ? remaining : const Duration(milliseconds: 200);
+          _logFlushTimer = Timer(delay, () {
+            _logFlushDeadline = null;
+            logController.add(_logRing.toList());
+          });
+        }
         event.message.split('\n').forEach((line) {
           loggy.log(getLogLevel(event.level), line);
         });
@@ -564,6 +607,8 @@ class HiddifyCoreService with InfraLogger {
     if (!core.isInitialized()) {
       return;
     }
+    _logFlushTimer?.cancel();
+    _logFlushDeadline = null;
     if (!core.isSingleChannel()) {
       await stopListenSingle("fg");
       await stopListenSingle("bg");

@@ -127,6 +127,7 @@ void _showInviteShareDialog(BuildContext context) async {
       '免费注册，一键连接，安全稳定。\n\n'
       '📥 下载：https://dl.roxi.cc/roxi-latest.apk\n'
       '📢 群组：https://t.me/Roxifree\n\n'
+      '🔗 邀请链接：https://roxi.cc/$invCode\n'
       '注册时填我的邀请码：$invCode\n'
       '好友购买会员，你我各得时长奖励！';
 

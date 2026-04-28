@@ -198,6 +198,11 @@ message SetSystemProxyEnabledRequest {
   bool is_enabled = 1;
 }
 
+message ParseOutboundsRequest {
+  string config_path = 1;
+  string config_content = 2;
+}
+
 enum LogLevel {
   DEBUG = 0;
   INFO = 1;

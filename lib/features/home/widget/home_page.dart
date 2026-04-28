@@ -445,13 +445,14 @@ class _NewUserGiftButton extends StatefulWidget {
 }
 
 class _NewUserGiftButtonState extends State<_NewUserGiftButton>
-    with SingleTickerProviderStateMixin {
+    with SingleTickerProviderStateMixin, WidgetsBindingObserver {
   late final AnimationController _ctrl;
   late final Animation<double> _bounce;
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _ctrl = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 1200),
@@ -462,7 +463,18 @@ class _NewUserGiftButtonState extends State<_NewUserGiftButton>
   }
 
   @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    // Pause the animation when the app is in the background to save frames.
+    if (state == AppLifecycleState.paused || state == AppLifecycleState.inactive) {
+      _ctrl.stop();
+    } else if (state == AppLifecycleState.resumed) {
+      if (!_ctrl.isAnimating) _ctrl.repeat(reverse: true);
+    }
+  }
+
+  @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _ctrl.dispose();
     super.dispose();
   }

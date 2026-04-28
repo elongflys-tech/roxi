@@ -115,7 +115,7 @@ class ProfilePage extends HookWidget {
         const SizedBox(height: 8),
         if (invCode.toString().isNotEmpty)
           TextButton.icon(onPressed: () {
-            Clipboard.setData(ClipboardData(text: 'https://roxi.cc/i/$invCode'));
+            Clipboard.setData(ClipboardData(text: 'https://roxi.cc/$invCode'));
             ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(s['guideInviteCopied']!), duration: const Duration(seconds: 2)));
           }, icon: const Icon(Icons.copy_rounded, size: 16), label: Text(s['copyInviteLink']!)),
         const SizedBox(height: 8),

@@ -1,15 +1,20 @@
 import 'dart:async';
 
 import 'package:dartx/dartx.dart';
+import 'package:rxdart/rxdart.dart';
 
 import 'package:hiddify/core/haptic/haptic_service.dart';
 import 'package:hiddify/core/localization/translations.dart';
 import 'package:hiddify/core/preferences/preferences_provider.dart';
 import 'package:hiddify/core/utils/preferences_utils.dart';
 import 'package:hiddify/features/connection/notifier/connection_notifier.dart';
+import 'package:hiddify/features/profile/notifier/active_profile_notifier.dart';
+import 'package:hiddify/features/profile/data/profile_data_providers.dart';
 import 'package:hiddify/features/proxy/data/proxy_data_providers.dart';
+import 'package:hiddify/features/proxy/data/proxies_cache.dart';
 import 'package:hiddify/features/proxy/model/proxy_failure.dart';
 import 'package:hiddify/hiddifycore/generated/v2/hcore/hcore.pb.dart';
+import 'package:hiddify/hiddifycore/hiddify_core_service_provider.dart';
 import 'package:hiddify/hiddifycore/init_signal.dart';
 import 'package:hiddify/utils/riverpod_utils.dart';
 import 'package:hiddify/utils/utils.dart';
@@ -61,37 +66,50 @@ class ProxiesOverviewNotifier extends _$ProxiesOverviewNotifier with AppLogger {
     ref.disposeDelay(const Duration(seconds: 15));
     ref.watch(coreRestartSignalProvider);
     final serviceRunning = await ref.watch(serviceRunningProvider.future);
-    if (!serviceRunning) {
-      throw const ServiceNotRunning();
-    }
     final sortBy = ref.watch(proxiesSortNotifierProvider);
-    // yield* ref
-    //     .watch(proxyRepositoryProvider)
-    //     .watchProxies()
-    //     .throttleTime(
-    //       const Duration(milliseconds: 100),
-    //       leading: false,
-    //       trailing: true,
-    //     )
-    //     .map(
-    //       (event) => event.getOrElse(
-    //         (err) {
-    //           loggy.warning("error receiving proxies", err);
-    //           throw err;
-    //         },
-    //       ),
-    //     )
-    //     .asyncMap((proxies) async => _sortOutbounds(proxies, sortBy));
+
+    if (!serviceRunning) {
+      // Service not running — try offline parsing of the active profile's
+      // config file so the node list is available before connection.
+      final activeProfile = await ref.watch(activeProfileProvider.future);
+      if (activeProfile != null) {
+        final singbox = ref.read(hiddifyCoreServiceProvider);
+        final pathResolver = ref.read(profilePathResolverProvider);
+        final configPath = pathResolver.file(activeProfile.id).path;
+        final parsed = await singbox.parseOutbounds(configPath);
+        if (parsed != null && parsed.items.isNotEmpty) {
+          final group = parsed.items.first;
+          // Also update the cache with the freshly parsed data.
+          ProxiesCache.save(group);
+          yield await _sortOutbounds(group, sortBy);
+          return;
+        }
+      }
+      // Offline parsing failed or no profile — fall back to cache.
+      final cached = await ProxiesCache.load();
+      if (cached != null) {
+        yield await _sortOutbounds(cached, sortBy);
+      }
+      return;
+    }
+
     yield* ref
         .watch(proxyRepositoryProvider)
         .watchProxies()
+        .throttleTime(const Duration(seconds: 1), leading: true, trailing: true)
         .map(
           (event) => event.getOrElse((err) {
             loggy.warning("error receiving proxies", err);
             throw err;
           }),
         )
-        .asyncMap((proxies) async => await _sortOutbounds(proxies, sortBy));
+        .asyncMap((proxies) async {
+          // Persist to cache for next cold start.
+          if (proxies != null) {
+            ProxiesCache.save(proxies);
+          }
+          return await _sortOutbounds(proxies, sortBy);
+        });
   }
 
   // Future<List<OutboundGroup>> _sortOutbounds(

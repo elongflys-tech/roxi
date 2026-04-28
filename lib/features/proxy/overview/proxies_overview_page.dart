@@ -112,8 +112,12 @@ class ProxiesOverviewPage extends HookConsumerWidget with PresLogger {
                       return ProxyTile(
                         proxy,
                         selected: group.selected == proxy.tag,
-                        onTap: () async {
-                          await ref.read(proxiesOverviewNotifierProvider.notifier).changeProxy(group.tag, proxy.tag);
+                        onTap: () {
+                          if (!isConnected) {
+                            ref.read(connectionNotifierProvider.notifier).toggleConnection();
+                            return;
+                          }
+                          ref.read(proxiesOverviewNotifierProvider.notifier).changeProxy(group.tag, proxy.tag);
                         },
                       );
                     },

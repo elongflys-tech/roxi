@@ -230,8 +230,12 @@ class NodeListCard extends HookConsumerWidget {
                           return _NodeRow(
                             node: node,
                             isSelected: isSelected,
-                            onTap: () async {
-                              await ref.read(proxiesOverviewNotifierProvider.notifier)
+                            onTap: () {
+                              if (!isConnected) {
+                                ref.read(connectionNotifierProvider.notifier).toggleConnection();
+                                return;
+                              }
+                              ref.read(proxiesOverviewNotifierProvider.notifier)
                                   .changeProxy(group.tag, node.tag);
                             },
                           );

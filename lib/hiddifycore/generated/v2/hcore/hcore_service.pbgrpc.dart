@@ -116,6 +116,12 @@ class CoreClient extends $grpc.Client {
       '/hcore.Core/Close',
       ($0.CloseRequest value) => value.writeToBuffer(),
       ($core.List<$core.int> value) => $1.Empty.fromBuffer(value));
+  static final _$parseOutbounds =
+      $grpc.ClientMethod<$0.ParseOutboundsRequest, $0.OutboundGroupList>(
+          '/hcore.Core/ParseOutbounds',
+          ($0.ParseOutboundsRequest value) => value.writeToBuffer(),
+          ($core.List<$core.int> value) =>
+              $0.OutboundGroupList.fromBuffer(value));
 
   CoreClient($grpc.ClientChannel channel,
       {$grpc.CallOptions? options,
@@ -236,6 +242,12 @@ class CoreClient extends $grpc.Client {
   $grpc.ResponseFuture<$1.Empty> close($0.CloseRequest request,
       {$grpc.CallOptions? options}) {
     return $createUnaryCall(_$close, request, options: options);
+  }
+
+  $grpc.ResponseFuture<$0.OutboundGroupList> parseOutbounds(
+      $0.ParseOutboundsRequest request,
+      {$grpc.CallOptions? options}) {
+    return $createUnaryCall(_$parseOutbounds, request, options: options);
   }
 }
 

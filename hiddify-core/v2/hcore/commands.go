@@ -20,7 +20,7 @@ import (
 	"google.golang.org/grpc"
 )
 
-func readStatus(prev *SystemInfo) *SystemInfo {
+func readStatus(prev *SystemInfo, intervalSec int64) *SystemInfo {
 	var message SystemInfo
 	message.Memory = int64(memory.Inuse())
 	message.Goroutines = int32(runtime.NumGoroutine())
@@ -33,8 +33,15 @@ func readStatus(prev *SystemInfo) *SystemInfo {
 			message.UplinkTotal, message.DownlinkTotal = trafficManager.Total()
 			message.ConnectionsIn = int32(trafficManager.ConnectionsLen())
 			if prev != nil {
-				message.Uplink = message.UplinkTotal - prev.UplinkTotal
-				message.Downlink = message.DownlinkTotal - prev.DownlinkTotal
+				// Normalize to per-second rate so the UI displays correct speed
+				// regardless of the polling interval.
+				if intervalSec > 0 {
+					message.Uplink = (message.UplinkTotal - prev.UplinkTotal) / intervalSec
+					message.Downlink = (message.DownlinkTotal - prev.DownlinkTotal) / intervalSec
+				} else {
+					message.Uplink = message.UplinkTotal - prev.UplinkTotal
+					message.Downlink = message.DownlinkTotal - prev.DownlinkTotal
+				}
 			}
 		}
 
@@ -66,16 +73,23 @@ func readStatus(prev *SystemInfo) *SystemInfo {
 }
 
 func (s *CoreService) GetSystemInfo(req *hcommon.Empty, stream grpc.ServerStreamingServer[SystemInfo]) error {
-	// return fmt.Errorf("not implemented yet")
-	ticker := time.NewTicker(time.Duration(1 * time.Second))
-	current_status := readStatus(nil)
+	const intervalSec = 2
+	ticker := time.NewTicker(intervalSec * time.Second)
+	defer ticker.Stop()
+	// Send an initial status immediately so the UI isn't blank for 2 s.
+	current_status := readStatus(nil, intervalSec)
+	if err := stream.Send(current_status); err != nil {
+		return err
+	}
 	for {
 		select {
 		case <-stream.Context().Done():
 			return nil
 		case <-ticker.C:
-			current_status = readStatus(current_status)
-			stream.Send(current_status)
+			current_status = readStatus(current_status, intervalSec)
+			if err := stream.Send(current_status); err != nil {
+				return err
+			}
 		}
 	}
 }
