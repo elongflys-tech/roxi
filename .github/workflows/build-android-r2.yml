@@ -4,9 +4,9 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: 'Version number (e.g. 1.0.2)'
+        description: 'Version number (e.g. 1.3.5)'
         required: true
-        default: '1.2.2'
+        default: '1.3.5'
 
 env:
   FLUTTER_VERSION: '3.38.5'
@@ -15,6 +15,9 @@ env:
 jobs:
   build-android:
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: hiddify-app
     steps:
       - name: Checkout
         uses: actions/checkout@v6
@@ -38,28 +41,26 @@ jobs:
       - name: Download Android core libs
         run: |
           mkdir -p android/app/libs
-          curl -fL https://github.com/hiddify/hiddify-next-core/releases/download/draft/hiddify-lib-android.tar.gz | tar xz -C android/app/libs/
+          curl -L https://github.com/hiddify/hiddify-next-core/releases/download/draft/hiddify-core.aar -o android/app/libs/hiddify-core.aar
           ls -lh android/app/libs/
 
       - name: Download hiddify-core bin (for codegen)
         run: |
           mkdir -p hiddify-core/bin
-          curl -fL https://github.com/hiddify/hiddify-next-core/releases/download/draft/hiddify-lib-linux-amd64.tar.gz | tar xz -C hiddify-core/bin/
+          curl -L https://github.com/hiddify/hiddify-next-core/releases/download/draft/hiddify-lib-linux-amd64.tar.gz | tar xz -C hiddify-core/bin/
           ls hiddify-core/bin/
 
       - name: Generate code
         run: |
-          dart pub global activate protoc_plugin || true
+          make get gen translate || true
           dart run build_runner build --delete-conflicting-outputs || true
-          make gen translate || true
-          find lib -name "*.g.dart" | head -5 || true
 
-      - name: Setup Android signing
+      - name: Setup Android Signing
         env:
           ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
-          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
-          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
           ANDROID_STORE_PASSWORD: ${{ secrets.ANDROID_STORE_PASSWORD }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
         run: |
           echo "$ANDROID_KEYSTORE_BASE64" | base64 -d > android/release-keystore.jks
           cat > android/key.properties << EOF
@@ -70,7 +71,8 @@ jobs:
           EOF
 
       - name: Build APK
-        run: flutter build apk --release --split-per-abi --target-platform android-arm64 -t lib/main_prod.dart
+        run: |
+          flutter build apk --release --split-per-abi --target-platform android-arm64
 
       - name: Package APK
         run: |
@@ -99,20 +101,10 @@ jobs:
 
           echo "Done! https://dl.roxi.cc/roxi-latest.apk"
 
-      - name: Purge CDN Cache
-        env:
-          CF_API_TOKEN: ${{ secrets.CF_API_TOKEN }}
-        run: |
-          curl -s -X POST "https://api.cloudflare.com/client/v4/zones/1850ad3746304d9dd2480060d4e55747/purge_cache" \
-            -H "Authorization: Bearer $CF_API_TOKEN" \
-            -H "Content-Type: application/json" \
-            --data '{"files":["https://dl.roxi.cc/roxi-latest.apk","https://dl.roxi.cc/roxi-arm64-v${{ github.event.inputs.version }}.apk"]}' \
-            | python3 -c "import sys,json; r=json.load(sys.stdin); print('CDN purge OK' if r.get('success') else f'CDN purge FAILED: {r}')"
-
       - name: Upload Artifact
         uses: actions/upload-artifact@v6
         if: always()
         with:
           name: android-build
-          path: out/
+          path: hiddify-app/out/
           retention-days: 7
