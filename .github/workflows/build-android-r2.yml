@@ -38,13 +38,16 @@ jobs:
       - name: Download Android core libs
         run: |
           mkdir -p android/app/libs
-          curl -L https://github.com/hiddify/hiddify-next-core/releases/download/draft/hiddify-core.aar -o android/app/libs/hiddify-core.aar
+          CORE_VER=$(grep 'core.version=' dependencies.properties | cut -d= -f2)
+          echo "Downloading hiddify-core v${CORE_VER} for Android..."
+          curl -L -f "https://github.com/hiddify/hiddify-core/releases/download/v${CORE_VER}/hiddify-lib-android.tar.gz" | tar xz -C android/app/libs/
           ls -lh android/app/libs/
 
       - name: Download hiddify-core bin (for codegen)
         run: |
           mkdir -p hiddify-core/bin
-          curl -L https://github.com/hiddify/hiddify-next-core/releases/download/draft/hiddify-lib-linux-amd64.tar.gz | tar xz -C hiddify-core/bin/
+          CORE_VER=$(grep 'core.version=' dependencies.properties | cut -d= -f2)
+          curl -L -f "https://github.com/hiddify/hiddify-core/releases/download/v${CORE_VER}/hiddify-lib-linux-amd64.tar.gz" | tar xz -C hiddify-core/bin/
           ls hiddify-core/bin/
 
       - name: Generate code
