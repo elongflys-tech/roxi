@@ -1,0 +1,31 @@
+name: Upload v2rayN macOS to R2
+
+on:
+  workflow_dispatch:
+
+jobs:
+  upload:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download v2rayN macOS DMG
+        run: |
+          curl -L -o v2rayN-macos-arm64.dmg "https://github.com/2dust/v2rayN/releases/download/7.20.4/v2rayN-macos-arm64.dmg"
+          ls -lh v2rayN-macos-arm64.dmg
+
+      - name: Upload to R2
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+        run: |
+          pip install awscli -q
+          R2_EP="https://bd237e8588122632a186921f28ebdfee.r2.cloudflarestorage.com"
+          aws configure set aws_access_key_id "$AWS_ACCESS_KEY_ID"
+          aws configure set aws_secret_access_key "$AWS_SECRET_ACCESS_KEY"
+          aws configure set default.region auto
+
+          aws s3 cp v2rayN-macos-arm64.dmg \
+            "s3://app-downloads/v2rayN-macos-arm64.dmg" \
+            --endpoint-url "$R2_EP" \
+            --content-type "application/x-apple-diskimage"
+
+          echo "Done! https://dl.roxi.cc/v2rayN-macos-arm64.dmg"
