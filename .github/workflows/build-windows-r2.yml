@@ -4,9 +4,9 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: 'Version number (e.g. 1.3.4)'
-        required: true
-        default: '1.3.4'
+        description: 'Version override (leave empty to read from pubspec.yaml)'
+        required: false
+        default: ''
 
 env:
   FLUTTER_VERSION: '3.38.5'
@@ -20,6 +20,19 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v6
+
+      - name: Resolve version
+        id: version
+        shell: bash
+        run: |
+          INPUT_VER="${{ github.event.inputs.version }}"
+          if [ -n "$INPUT_VER" ]; then
+            echo "ver=$INPUT_VER" >> $GITHUB_OUTPUT
+          else
+            VER=$(grep -E '^version:' pubspec.yaml | sed -E 's/version: *([0-9]+\.[0-9]+\.[0-9]+).*/\1/')
+            echo "ver=$VER" >> $GITHUB_OUTPUT
+          fi
+          echo "Using version: $(grep ver $GITHUB_OUTPUT | cut -d= -f2)"
 
       - name: Setup Flutter
         uses: subosito/flutter-action@v2.21.0
@@ -146,9 +159,9 @@ jobs:
             New-Item -ItemType Directory -Path $stageDir -Force | Out-Null
             Copy-Item -Path "$buildDir\*" -Destination $stageDir -Recurse
             Push-Location out
-            7z a -tzip "roxi-win-${{ github.event.inputs.version }}.zip" "Roxi" -r
+            7z a -tzip "roxi-win-${{ steps.version.outputs.ver }}.zip" "Roxi" -r
             Pop-Location
-            Copy-Item "out\roxi-win-${{ github.event.inputs.version }}.zip" "out\roxi-latest.zip"
+            Copy-Item "out\roxi-win-${{ steps.version.outputs.ver }}.zip" "out\roxi-latest.zip"
             Remove-Item -Recurse -Force $stageDir
 
             Get-ChildItem out/
@@ -164,7 +177,7 @@ jobs:
         shell: pwsh
         run: |
           # Update MSIX config with current version and certificate
-          $version = "${{ github.event.inputs.version }}.0"
+          $version = "${{ steps.version.outputs.ver }}.0"
           $configPath = "windows\packaging\msix\make_config.yaml"
           $config = Get-Content $configPath -Raw
           $config = $config -replace 'msix_version: .*', "msix_version: $version"
@@ -189,7 +202,7 @@ jobs:
           New-Item -ItemType Directory -Path "out" -Force | Out-Null
           $msixFile = Get-ChildItem -Path "build" -Filter "*.msix" -Recurse -ErrorAction SilentlyContinue | Select-Object -First 1
           if ($msixFile) {
-            Copy-Item $msixFile.FullName "out\roxi-win-${{ github.event.inputs.version }}.msix"
+            Copy-Item $msixFile.FullName "out\roxi-win-${{ steps.version.outputs.ver }}.msix"
             Copy-Item $msixFile.FullName "out\roxi-latest.msix"
             Write-Host "MSIX collected: $($msixFile.Name) ($($msixFile.Length) bytes)"
           } else {
@@ -199,7 +212,7 @@ jobs:
           # Also copy the main exe as roxi-latest.exe for direct download
           $exePath = "build\windows\x64\runner\Release\Roxi.exe"
           if (Test-Path $exePath) {
-            Copy-Item $exePath "out\roxi-win-${{ github.event.inputs.version }}.exe"
+            Copy-Item $exePath "out\roxi-win-${{ steps.version.outputs.ver }}.exe"
             Copy-Item $exePath "out\roxi-latest.exe"
             Write-Host "EXE collected: Roxi.exe"
           }
@@ -220,9 +233,9 @@ jobs:
           aws configure set default.region auto
 
           # Upload ZIP
-          if [ -f "out/roxi-win-${{ github.event.inputs.version }}.zip" ]; then
-            aws s3 cp "out/roxi-win-${{ github.event.inputs.version }}.zip" \
-              "s3://app-downloads/roxi-win-${{ github.event.inputs.version }}.zip" \
+          if [ -f "out/roxi-win-${{ steps.version.outputs.ver }}.zip" ]; then
+            aws s3 cp "out/roxi-win-${{ steps.version.outputs.ver }}.zip" \
+              "s3://app-downloads/roxi-win-${{ steps.version.outputs.ver }}.zip" \
               --endpoint-url "$R2_EP" --content-type "application/zip"
             aws s3 cp "out/roxi-latest.zip" \
               "s3://app-downloads/roxi-latest.zip" \
@@ -231,9 +244,9 @@ jobs:
           fi
 
           # Upload EXE
-          if [ -f "out/roxi-win-${{ github.event.inputs.version }}.exe" ]; then
-            aws s3 cp "out/roxi-win-${{ github.event.inputs.version }}.exe" \
-              "s3://app-downloads/roxi-win-${{ github.event.inputs.version }}.exe" \
+          if [ -f "out/roxi-win-${{ steps.version.outputs.ver }}.exe" ]; then
+            aws s3 cp "out/roxi-win-${{ steps.version.outputs.ver }}.exe" \
+              "s3://app-downloads/roxi-win-${{ steps.version.outputs.ver }}.exe" \
               --endpoint-url "$R2_EP" --content-type "application/x-msdownload"
             aws s3 cp "out/roxi-latest.exe" \
               "s3://app-downloads/roxi-latest.exe" \
@@ -242,9 +255,9 @@ jobs:
           fi
 
           # Upload MSIX
-          if [ -f "out/roxi-win-${{ github.event.inputs.version }}.msix" ]; then
-            aws s3 cp "out/roxi-win-${{ github.event.inputs.version }}.msix" \
-              "s3://app-downloads/roxi-win-${{ github.event.inputs.version }}.msix" \
+          if [ -f "out/roxi-win-${{ steps.version.outputs.ver }}.msix" ]; then
+            aws s3 cp "out/roxi-win-${{ steps.version.outputs.ver }}.msix" \
+              "s3://app-downloads/roxi-win-${{ steps.version.outputs.ver }}.msix" \
               --endpoint-url "$R2_EP" --content-type "application/msix"
             aws s3 cp "out/roxi-latest.msix" \
               "s3://app-downloads/roxi-latest.msix" \
