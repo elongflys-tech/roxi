@@ -716,34 +716,33 @@ class _SwipeNodeTile extends StatefulWidget {
 }
 
 class _SwipeNodeTileState extends State<_SwipeNodeTile> with SingleTickerProviderStateMixin {
-  AnimationController? _animCtrl;
-  Animation<Offset>? _slideAnim;
+  late final AnimationController _animCtrl;
+  late final Animation<Offset> _slideAnim;
   bool _showActions = false;
 
-  AnimationController _ensureController() {
-    if (_animCtrl == null) {
-      _animCtrl = AnimationController(vsync: this, duration: const Duration(milliseconds: 200));
-      _slideAnim = Tween<Offset>(begin: Offset.zero, end: const Offset(-140, 0))
-          .animate(CurvedAnimation(parent: _animCtrl!, curve: Curves.easeOut));
-    }
-    return _animCtrl!;
+  @override
+  void initState() {
+    super.initState();
+    _animCtrl = AnimationController(vsync: this, duration: const Duration(milliseconds: 200));
+    _slideAnim = Tween<Offset>(begin: Offset.zero, end: const Offset(-140, 0))
+        .animate(CurvedAnimation(parent: _animCtrl, curve: Curves.easeOut));
   }
 
   @override
   void dispose() {
-    _animCtrl?.dispose();
+    _animCtrl.dispose();
     super.dispose();
   }
 
   void _open() {
     if (_showActions) return;
     setState(() => _showActions = true);
-    _ensureController().forward();
+    _animCtrl.forward();
   }
 
   void _close() {
     if (!_showActions) return;
-    _animCtrl?.reverse().then((_) {
+    _animCtrl.reverse().then((_) {
       if (mounted) setState(() => _showActions = false);
     });
   }
@@ -798,9 +797,9 @@ class _SwipeNodeTileState extends State<_SwipeNodeTile> with SingleTickerProvide
               ),
             // Foreground tile
             AnimatedBuilder(
-              animation: _slideAnim ?? const AlwaysStoppedAnimation(Offset.zero),
+              animation: _slideAnim,
               builder: (_, child) => Transform.translate(
-                offset: _slideAnim?.value ?? Offset.zero,
+                offset: _slideAnim.value,
                 child: child,
               ),
               child: Container(
