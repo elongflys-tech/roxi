@@ -207,7 +207,29 @@ class VPNService : VpnService(), PlatformInterfaceWrapper {
             systemProxyEnabled = false
         }
 
-        val pfd = builder.establish() ?: error("android: the application is not prepared or is revoked")
+        var pfd: ParcelFileDescriptor? = null
+        var lastError: Throwable? = null
+        // Retry establish() to handle cases where the previous TUN interface
+        // hasn't been fully released by the OS yet (race condition on restart)
+        for (attempt in 0 until 5) {
+            try {
+                val result = builder.establish()
+                if (result != null) {
+                    pfd = result
+                    break
+                }
+            } catch (e: Exception) {
+                lastError = e
+                Log.w("VPN", "establish() attempt $attempt failed: ${e.message}")
+            }
+            if (attempt < 4) {
+                Log.d("VPN", "waiting before retry establish(), attempt ${attempt + 1}")
+                Thread.sleep(500)
+            }
+        }
+        if (pfd == null) {
+            error("android: the application is not prepared or is revoked. ${lastError?.message ?: ""}")
+        }
         service.fileDescriptor = pfd
         return pfd.fd
     }

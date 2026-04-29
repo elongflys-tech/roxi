@@ -794,14 +794,34 @@ func setRoutingOptions(options *option.Options, opt *HiddifyOptions) {
 				Outbound:     OutboundDirectTag,
 			},
 		})
-		dnsRules = append(dnsRules, option.DefaultDNSRule{
-			RuleSet: []string{
-				// "geoip-" + opt.Region,
-				"geosite-" + opt.Region,
-			},
-			Server: DNSDirectTag,
-		})
 
+		// Determine the correct geosite rule set for each region.
+		// - cn: use geosite-geolocation-cn (comprehensive Chinese domains including
+		//   WeChat, QQ, Baidu, Alibaba, etc.), sourced from upstream Chocolate4U.
+		// - ir: use geosite-ir from hiddify-geo (correct upstream data).
+		// - ru: use geosite-category-ru from upstream Chocolate4U (comprehensive
+		//   Russian domains). hiddify-geo's geosite-ru already maps to this.
+		// - af: use geosite-ir as fallback (hiddify-geo copies ir→af, which is
+		//   reasonable since Afghanistan shares many Persian-language services).
+		// - id, tr, br: NO reliable geosite rule set exists upstream. The hiddify-geo
+		//   repo had a copy-paste bug that mapped these to wrong data (ru gov / ir).
+		//   For these regions, only use geoip + domain suffix matching.
+		geositeTag := ""
+		geositeURL := ""
+		switch opt.Region {
+		case "cn":
+			geositeTag = "geosite-geolocation-cn"
+			geositeURL = "https://cdn.jsdelivr.net/gh/chocolate4u/Iran-sing-box-rules@rule-set/geosite-geolocation-cn.srs"
+		case "ir", "af":
+			geositeTag = "geosite-" + opt.Region
+			geositeURL = "https://raw.githubusercontent.com/hiddify/hiddify-geo/rule-set/country/geosite-" + opt.Region + ".srs"
+		case "ru":
+			geositeTag = "geosite-category-ru"
+			geositeURL = "https://cdn.jsdelivr.net/gh/chocolate4u/Iran-sing-box-rules@rule-set/geosite-category-ru.srs"
+		// id, tr, br: no geosite rule set available, skip
+		}
+
+		// Always add geoip rule set (available for all regions)
 		rulesets = append(rulesets, option.RuleSet{
 			Type:   C.RuleSetTypeRemote,
 			Tag:    "geoip-" + opt.Region,
@@ -811,26 +831,48 @@ func setRoutingOptions(options *option.Options, opt *HiddifyOptions) {
 				UpdateInterval: option.Duration(5 * time.Hour * 24),
 			},
 		})
-		rulesets = append(rulesets, option.RuleSet{
-			Type:   C.RuleSetTypeRemote,
-			Tag:    "geosite-" + opt.Region,
-			Format: C.RuleSetFormatBinary,
-			RemoteOptions: option.RemoteRuleSet{
-				URL:            "https://raw.githubusercontent.com/hiddify/hiddify-geo/rule-set/country/geosite-" + opt.Region + ".srs",
-				UpdateInterval: option.Duration(5 * time.Hour * 24),
-			},
-		})
 
-		routeRules = append(routeRules, option.Rule{
-			Type: C.RuleTypeDefault,
-			DefaultOptions: option.DefaultRule{
-				RuleSet: []string{
-					"geoip-" + opt.Region,
-					"geosite-" + opt.Region,
+		if geositeTag != "" {
+			// Add geosite DNS rule
+			dnsRules = append(dnsRules, option.DefaultDNSRule{
+				RuleSet: []string{geositeTag},
+				Server:  DNSDirectTag,
+			})
+
+			// Add geosite rule set
+			rulesets = append(rulesets, option.RuleSet{
+				Type:   C.RuleSetTypeRemote,
+				Tag:    geositeTag,
+				Format: C.RuleSetFormatBinary,
+				RemoteOptions: option.RemoteRuleSet{
+					URL:            geositeURL,
+					UpdateInterval: option.Duration(5 * time.Hour * 24),
 				},
-				Outbound: OutboundDirectTag,
-			},
-		})
+			})
+
+			// Route rule: geoip + geosite → direct
+			routeRules = append(routeRules, option.Rule{
+				Type: C.RuleTypeDefault,
+				DefaultOptions: option.DefaultRule{
+					RuleSet: []string{
+						"geoip-" + opt.Region,
+						geositeTag,
+					},
+					Outbound: OutboundDirectTag,
+				},
+			})
+		} else {
+			// No geosite available, route only by geoip → direct
+			routeRules = append(routeRules, option.Rule{
+				Type: C.RuleTypeDefault,
+				DefaultOptions: option.DefaultRule{
+					RuleSet: []string{
+						"geoip-" + opt.Region,
+					},
+					Outbound: OutboundDirectTag,
+				},
+			})
+		}
 	}
 	if opt.RouteOptions.BlockQuic {
 		routeRules = append(routeRules, option.Rule{

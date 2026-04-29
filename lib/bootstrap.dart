@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
@@ -172,6 +173,49 @@ Future<void> lazyBootstrap(WidgetsBinding widgetsBinding, Environment env) async
       }
     });
   }
+
+  // Fallback: if there's still no active profile (subscription download failed
+  // or auth was unreachable), import hardcoded bootstrap VLESS nodes so the
+  // node list shows real connectable nodes instead of cosmetic previews.
+  await _safeInit("bootstrap-nodes-fallback", () async {
+    final activeProfile = await container.read(activeProfileProvider.future);
+    if (activeProfile != null) return; // already have a profile, no need
+
+    final prefs = container.read(sharedPreferencesProvider).requireValue;
+    if (prefs.getBool('bootstrap_imported') == true) {
+      // Bootstrap nodes were imported in a previous launch but profile might
+      // have been cleaned up. Re-check if any profile exists at all.
+      final repo = container.read(profileRepositoryProvider).requireValue;
+      final existing = await repo.watchAll().first;
+      final list = existing.getOrElse((_) => []);
+      if (list.isNotEmpty) return; // profiles exist, just not active — skip
+    }
+
+    Logger.bootstrap.info("no active profile after bootstrap, importing embedded nodes");
+    const bootstrapVless = [
+      'vless://94134baf-dab3-41dc-9c15-085fdf15b86e@168.231.126.166:443?hiddify=1&sni=168.231.126.166&type=xhttp&alpn=http%2F1.1&path=%2FlY4xhKGq8xfNOWdIEmY7Q&host=168.231.126.166&encryption=none&fp=chrome&core=xray&extra=%7B%22headers%22%3A%7B%7D%7D&headerType=none&allowInsecure=true&insecure=true&security=tls#%F0%9F%8C%90%20%E5%BC%95%E5%AF%BC%E8%8A%82%E7%82%B91',
+      'vless://94134baf-dab3-41dc-9c15-085fdf15b86e@72.61.170.142:443?hiddify=1&sni=72.61.170.142&type=xhttp&alpn=http%2F1.1&path=%2FmwNPtjMmRlEizimS5Qr3&host=72.61.170.142&encryption=none&fp=chrome&core=xray&extra=%7B%22headers%22%3A%7B%7D%7D&headerType=none&allowInsecure=true&insecure=true&security=tls#%F0%9F%8C%90%20%E5%BC%95%E5%AF%BC%E8%8A%82%E7%82%B92',
+    ];
+    final rawContent = bootstrapVless.join('\n');
+    final b64Content = base64Encode(utf8.encode(rawContent));
+    final bootstrapUrl = 'data:application/octet-stream;base64,$b64Content';
+
+    final repo = container.read(profileRepositoryProvider).requireValue;
+    final result = await repo.upsertRemote(bootstrapUrl).run();
+    result.fold(
+      (f) => Logger.bootstrap.warning("bootstrap nodes import failed: $f"),
+      (_) => Logger.bootstrap.info("bootstrap nodes imported successfully"),
+    );
+
+    // Set as active
+    final after = await repo.watchAll().first;
+    final list = after.getOrElse((_) => []);
+    if (list.isNotEmpty) {
+      await repo.setAsActive(list.last.id).run();
+      Logger.bootstrap.info("bootstrap profile set as active: ${list.last.id}");
+    }
+    await prefs.setBool('bootstrap_imported', true);
+  });
 
   if (!kIsWeb) {
     // await _safeInit(

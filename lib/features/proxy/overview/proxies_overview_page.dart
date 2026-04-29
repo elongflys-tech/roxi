@@ -2,18 +2,17 @@ import 'dart:math';
 
 import 'package:fluentui_system_icons/fluentui_system_icons.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:gap/gap.dart';
 import 'package:hiddify/core/localization/translations.dart';
-import 'package:hiddify/core/model/failures.dart';
 import 'package:hiddify/features/connection/notifier/connection_notifier.dart';
 import 'package:hiddify/features/connection/model/connection_status.dart';
 import 'package:hiddify/features/proxy/overview/proxies_overview_notifier.dart';
 import 'package:hiddify/features/proxy/widget/proxy_tile.dart';
+import 'package:hiddify/hiddifycore/generated/v2/hcore/hcore.pb.dart';
 import 'package:hiddify/utils/utils.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 
-class ProxiesOverviewPage extends HookConsumerWidget with PresLogger {
+class ProxiesOverviewPage extends ConsumerWidget with PresLogger {
   const ProxiesOverviewPage({super.key});
 
   @override
@@ -28,21 +27,7 @@ class ProxiesOverviewPage extends HookConsumerWidget with PresLogger {
     final isConnected = connectionStatus == const Connected();
     final isConnecting = connectionStatus == const Connecting();
 
-    // Auto-connect when entering this page if not connected
-    final autoConnectTriggered = useRef(false);
-    useEffect(() {
-      if (!isConnected && !isConnecting && !autoConnectTriggered.value) {
-        autoConnectTriggered.value = true;
-        Future.microtask(() {
-          ref.read(connectionNotifierProvider.notifier).toggleConnection();
-        });
-      }
-      // Reset flag if user disconnects and comes back
-      if (isConnected) autoConnectTriggered.value = false;
-      return null;
-    }, [isConnected, isConnecting]);
-
-    Widget buildConnectPrompt() {
+    Widget buildEmptyState() {
       final theme = Theme.of(context);
       if (isConnecting) {
         return const Center(
@@ -62,11 +47,46 @@ class ProxiesOverviewPage extends HookConsumerWidget with PresLogger {
           children: [
             Icon(Icons.public_rounded, size: 48, color: theme.colorScheme.primary.withOpacity(0.4)),
             const Gap(16),
-            Text('正在加载节点列表...', style: theme.textTheme.bodyMedium),
+            Text('暂无节点数据', style: theme.textTheme.bodyMedium),
             const Gap(16),
-            const CircularProgressIndicator(),
+            FilledButton.icon(
+              onPressed: () => ref.read(connectionNotifierProvider.notifier).toggleConnection(),
+              icon: const Icon(Icons.power_settings_new_rounded, size: 18),
+              label: const Text('一键连接'),
+            ),
           ],
         ),
+      );
+    }
+
+    Widget buildGrid(OutboundGroup group) {
+      return LayoutBuilder(
+        builder: (context, constraints) {
+          final width = constraints.maxWidth;
+          final crossAxisCount = PlatformUtils.isMobile && width < 600 ? 1 : max(1, (width / 268).floor());
+          return GridView.builder(
+            padding: const EdgeInsets.only(bottom: 86),
+            itemCount: group.items.length,
+            gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+              crossAxisCount: crossAxisCount,
+              mainAxisExtent: 72,
+            ),
+            itemBuilder: (context, index) {
+              final proxy = group.items[index];
+              return ProxyTile(
+                proxy,
+                selected: group.selected == proxy.tag,
+                onTap: () {
+                  if (!isConnected) {
+                    ref.read(connectionNotifierProvider.notifier).toggleConnection();
+                    return;
+                  }
+                  ref.read(proxiesOverviewNotifierProvider.notifier).changeProxy(group.tag, proxy.tag);
+                },
+              );
+            },
+          );
+        },
       );
     }
 
@@ -96,37 +116,10 @@ class ProxiesOverviewPage extends HookConsumerWidget with PresLogger {
           : null,
       body: proxies.when(
         data: (group) => group != null && group.items.isNotEmpty
-            ? LayoutBuilder(
-                builder: (context, constraints) {
-                  final width = constraints.maxWidth;
-                  final crossAxisCount = PlatformUtils.isMobile && width < 600 ? 1 : max(1, (width / 268).floor());
-                  return GridView.builder(
-                    padding: const EdgeInsets.only(bottom: 86),
-                    itemCount: group.items.length,
-                    gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                      crossAxisCount: crossAxisCount,
-                      mainAxisExtent: 72,
-                    ),
-                    itemBuilder: (context, index) {
-                      final proxy = group.items[index];
-                      return ProxyTile(
-                        proxy,
-                        selected: group.selected == proxy.tag,
-                        onTap: () {
-                          if (!isConnected) {
-                            ref.read(connectionNotifierProvider.notifier).toggleConnection();
-                            return;
-                          }
-                          ref.read(proxiesOverviewNotifierProvider.notifier).changeProxy(group.tag, proxy.tag);
-                        },
-                      );
-                    },
-                  );
-                },
-              )
-            : buildConnectPrompt(),
-        error: (error, stackTrace) => buildConnectPrompt(),
-        loading: () => const Center(child: CircularProgressIndicator()),
+            ? buildGrid(group)
+            : buildEmptyState(),
+        error: (error, stackTrace) => buildEmptyState(),
+        loading: () => buildEmptyState(),
       ),
     );
   }

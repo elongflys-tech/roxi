@@ -137,7 +137,7 @@ class NodeListCard extends HookConsumerWidget {
                     ),
                   ),
                   // Refresh subscription button
-                  if (isConnected && activeProfile != null && activeProfile is RemoteProfileEntity)
+                  if (activeProfile != null && activeProfile is RemoteProfileEntity)
                     IconButton(
                       icon: const Icon(Icons.refresh_rounded, size: 20),
                       onPressed: () {
@@ -168,84 +168,120 @@ class NodeListCard extends HookConsumerWidget {
               ),
             ),
           ),
-          // Expanded node list — showcase when disconnected, real data when connected
-          if (expanded.value && !isConnected && showcaseNodes.value.isNotEmpty)
-            Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const Divider(height: 1),
-                ConstrainedBox(
-                  constraints: const BoxConstraints(maxHeight: 300),
-                  child: ListView.builder(
-                    shrinkWrap: true,
-                    padding: EdgeInsets.zero,
-                    itemCount: showcaseNodes.value.length,
-                    itemBuilder: (ctx, i) {
-                      final n = showcaseNodes.value[i];
-                      final locked = n['locked'] as bool? ?? false;
-                      return _ShowcaseRow(
-                        name: n['name'] as String? ?? '',
-                        cc: n['cc'] as String? ?? '',
-                        tag: n['tag'] as String? ?? '',
-                        locked: locked,
-                        onTap: locked
-                            ? () => showPlansSheet(context)
-                            : () => ref.read(connectionNotifierProvider.notifier).toggleConnection(),
-                      );
-                    },
-                  ),
-                ),
-              ],
-            ),
-          if (expanded.value && isConnected)
+          // Expanded node list — prefer real (offline-parsed/cached) data,
+          // fall back to showcase nodes, then show empty state.
+          if (expanded.value)
             proxiesAsync.when(
               data: (group) {
-                if (group == null || group.items.isEmpty) {
-                  return Padding(
-                    padding: const EdgeInsets.all(16),
-                    child: Text('暂无节点', style: theme.textTheme.bodySmall),
-                  );
-                }
-                final nodes = group.items.where((n) => !n.isGroup && n.tag.isNotEmpty && n.urlTestDelay < 65000).toList();
-                if (nodes.isEmpty) {
-                  return Padding(
-                    padding: const EdgeInsets.all(16),
-                    child: Text('暂无节点', style: theme.textTheme.bodySmall),
-                  );
-                }
-                final activeTag = activeProxy?.tag ?? '';
-                return Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const Divider(height: 1),
-                    ConstrainedBox(
-                      constraints: const BoxConstraints(maxHeight: 280),
-                      child: ListView.builder(
-                        shrinkWrap: true,
-                        padding: EdgeInsets.zero,
-                        itemCount: nodes.length,
-                        itemBuilder: (ctx, i) {
-                          final node = nodes[i];
-                          final isSelected = node.tag == activeTag;
-                          return _NodeRow(
-                            node: node,
-                            isSelected: isSelected,
-                            onTap: () {
-                              if (!isConnected) {
-                                ref.read(connectionNotifierProvider.notifier).toggleConnection();
-                                return;
-                              }
-                              ref.read(proxiesOverviewNotifierProvider.notifier)
-                                  .changeProxy(group.tag, node.tag);
-                            },
-                          );
-                        },
+                final realNodes = (group?.items ?? [])
+                    .where((n) => !n.isGroup && n.tag.isNotEmpty)
+                    .toList();
+
+                // Have real nodes (from offline parsing, cache, or live) — show them
+                if (realNodes.isNotEmpty) {
+                  final activeTag = activeProxy?.tag ?? '';
+                  return Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Divider(height: 1),
+                      ConstrainedBox(
+                        constraints: const BoxConstraints(maxHeight: 280),
+                        child: ListView.builder(
+                          shrinkWrap: true,
+                          padding: EdgeInsets.zero,
+                          itemCount: realNodes.length,
+                          itemBuilder: (ctx, i) {
+                            final node = realNodes[i];
+                            final isSelected = node.tag == activeTag;
+                            return _NodeRow(
+                              node: node,
+                              isSelected: isSelected,
+                              onTap: () {
+                                if (!isConnected) {
+                                  ref.read(connectionNotifierProvider.notifier).toggleConnection();
+                                  return;
+                                }
+                                ref.read(proxiesOverviewNotifierProvider.notifier)
+                                    .changeProxy(group!.tag, node.tag);
+                              },
+                            );
+                          },
+                        ),
                       ),
-                    ),
-                  ],
+                    ],
+                  );
+                }
+
+                // No real nodes — show showcase nodes if available
+                if (showcaseNodes.value.isNotEmpty) {
+                  return Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Divider(height: 1),
+                      ConstrainedBox(
+                        constraints: const BoxConstraints(maxHeight: 300),
+                        child: ListView.builder(
+                          shrinkWrap: true,
+                          padding: EdgeInsets.zero,
+                          itemCount: showcaseNodes.value.length,
+                          itemBuilder: (ctx, i) {
+                            final n = showcaseNodes.value[i];
+                            final locked = n['locked'] as bool? ?? false;
+                            return _ShowcaseRow(
+                              name: n['name'] as String? ?? '',
+                              cc: n['cc'] as String? ?? '',
+                              tag: n['tag'] as String? ?? '',
+                              locked: locked,
+                              onTap: locked
+                                  ? () => showPlansSheet(context)
+                                  : () => ref.read(connectionNotifierProvider.notifier).toggleConnection(),
+                            );
+                          },
+                        ),
+                      ),
+                    ],
+                  );
+                }
+
+                // Nothing at all
+                return Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Text('暂无节点', style: theme.textTheme.bodySmall),
                 );
               },
-              error: (_, __) => const SizedBox.shrink(),
+              error: (_, __) {
+                // Error state — show showcase nodes if available
+                if (showcaseNodes.value.isNotEmpty) {
+                  return Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Divider(height: 1),
+                      ConstrainedBox(
+                        constraints: const BoxConstraints(maxHeight: 300),
+                        child: ListView.builder(
+                          shrinkWrap: true,
+                          padding: EdgeInsets.zero,
+                          itemCount: showcaseNodes.value.length,
+                          itemBuilder: (ctx, i) {
+                            final n = showcaseNodes.value[i];
+                            final locked = n['locked'] as bool? ?? false;
+                            return _ShowcaseRow(
+                              name: n['name'] as String? ?? '',
+                              cc: n['cc'] as String? ?? '',
+                              tag: n['tag'] as String? ?? '',
+                              locked: locked,
+                              onTap: locked
+                                  ? () => showPlansSheet(context)
+                                  : () => ref.read(connectionNotifierProvider.notifier).toggleConnection(),
+                            );
+                          },
+                        ),
+                      ),
+                    ],
+                  );
+                }
+                return const SizedBox.shrink();
+              },
               loading: () => const Padding(
                 padding: EdgeInsets.all(16),
                 child: Center(child: SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))),

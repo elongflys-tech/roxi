@@ -134,7 +134,7 @@ class NodeListPage extends HookConsumerWidget {
         elevation: 0,
         scrolledUnderElevation: 0,
         actions: [
-          if (isConnected && activeProfile != null && activeProfile is RemoteProfileEntity)
+          if (activeProfile != null && activeProfile is RemoteProfileEntity)
             _AnimatedRefreshButton(
               isRefreshing: isRefreshing,
               onPressed: () {
@@ -250,7 +250,7 @@ class NodeListTabPage extends HookConsumerWidget {
         elevation: 0,
         scrolledUnderElevation: 0,
         actions: [
-          if (isConnected && activeProfile != null && activeProfile is RemoteProfileEntity)
+          if (activeProfile != null && activeProfile is RemoteProfileEntity)
             _AnimatedRefreshButton(
               isRefreshing: isRefreshing,
               onPressed: () {
@@ -352,25 +352,13 @@ class _ConnectedNodeList extends HookConsumerWidget {
         final realNodes = (group?.items ?? []).where((n) => !n.isGroup && n.tag.isNotEmpty).toList();
 
         if (realNodes.isEmpty) {
-          // No nodes at all (no cache, no live data) — show connect prompt
-          return Center(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(Icons.public_rounded, size: 48, color: Theme.of(context).colorScheme.primary.withOpacity(0.4)),
-                const SizedBox(height: 16),
-                Text(s['connectFirst'] ?? '请先连接以加载节点'),
-                const SizedBox(height: 16),
-                if (!isConnected)
-                  FilledButton.icon(
-                    onPressed: () => ref.read(connectionNotifierProvider.notifier).toggleConnection(),
-                    icon: const Icon(Icons.power_settings_new_rounded, size: 18),
-                    label: Text(s['oneClickConnect'] ?? '一键连接'),
-                  )
-                else
-                  const CircularProgressIndicator(),
-              ],
-            ),
+          // No real nodes — show showcase/fallback nodes instead of blank spinner
+          return _ShowcaseFallback(
+            showcaseNodes: showcaseNodes.value,
+            isExpired: isExpired,
+            userTier: userTier,
+            isConnected: isConnected,
+            onConnect: () => ref.read(connectionNotifierProvider.notifier).toggleConnection(),
           );
         }
 
@@ -398,9 +386,8 @@ class _ConnectedNodeList extends HookConsumerWidget {
         // Build a flat list of items for ListView.builder (lazy rendering).
         // Each item is either a header, a node tile, or the connectivity test tile.
         final flatItems = <_ListItem>[];
-        if (isConnected) {
-          flatItems.add(const _ListItem.connectivityTest());
-        }
+        // Always show connectivity test tile; it handles disabled state internally.
+        flatItems.add(const _ListItem.connectivityTest());
         for (final country in sortedCountries) {
           final countryNodes = grouped[country]!;
           flatItems.add(_ListItem.header(country, countryNodes.length));
@@ -417,6 +404,7 @@ class _ConnectedNodeList extends HookConsumerWidget {
             switch (item.type) {
               case _ListItemType.connectivityTest:
                 return _ConnectivityTestTile(
+                  isConnected: isConnected,
                   onTest: () => ref.read(proxiesOverviewNotifierProvider.notifier).urlTest("select"),
                 );
               case _ListItemType.header:
@@ -473,28 +461,25 @@ class _ConnectedNodeList extends HookConsumerWidget {
         );
       },
       error: (_, __) {
-        // No live data and no cache — show connect prompt
-        return Center(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(Icons.public_rounded, size: 48, color: Theme.of(context).colorScheme.primary.withOpacity(0.4)),
-              const SizedBox(height: 16),
-              Text(s['connectFirst'] ?? '请先连接以加载节点'),
-              const SizedBox(height: 16),
-              if (!isConnected)
-                FilledButton.icon(
-                  onPressed: () => ref.read(connectionNotifierProvider.notifier).toggleConnection(),
-                  icon: const Icon(Icons.power_settings_new_rounded, size: 18),
-                  label: Text(s['oneClickConnect'] ?? '一键连接'),
-                )
-              else
-                const CircularProgressIndicator(),
-            ],
-          ),
+        // No live data and no cache — show showcase/fallback nodes
+        return _ShowcaseFallback(
+          showcaseNodes: showcaseNodes.value,
+          isExpired: isExpired,
+          userTier: userTier,
+          isConnected: isConnected,
+          onConnect: () => ref.read(connectionNotifierProvider.notifier).toggleConnection(),
         );
       },
-      loading: () => const Center(child: CircularProgressIndicator()),
+      loading: () {
+        // While loading, show showcase/fallback nodes instead of blank spinner
+        return _ShowcaseFallback(
+          showcaseNodes: showcaseNodes.value,
+          isExpired: isExpired,
+          userTier: userTier,
+          isConnected: isConnected,
+          onConnect: () => ref.read(connectionNotifierProvider.notifier).toggleConnection(),
+        );
+      },
     );
   }
 }
@@ -604,8 +589,9 @@ class _RefreshOverlay extends StatelessWidget {
 // Speedometer icon on left, "连通性测试" label, circled "T" button on right.
 // ─────────────────────────────────────────────────────────────────────────────
 class _ConnectivityTestTile extends StatefulWidget {
+  final bool isConnected;
   final Future<void> Function() onTest;
-  const _ConnectivityTestTile({required this.onTest});
+  const _ConnectivityTestTile({required this.isConnected, required this.onTest});
 
   @override
   State<_ConnectivityTestTile> createState() => _ConnectivityTestTileState();
@@ -615,7 +601,7 @@ class _ConnectivityTestTileState extends State<_ConnectivityTestTile> {
   bool _testing = false;
 
   Future<void> _runTest() async {
-    if (_testing) return;
+    if (_testing || !widget.isConnected) return;
     setState(() => _testing = true);
     try {
       await widget.onTest();
@@ -631,6 +617,10 @@ class _ConnectivityTestTileState extends State<_ConnectivityTestTile> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final enabled = widget.isConnected;
+    final labelColor = enabled
+        ? theme.colorScheme.primary
+        : theme.colorScheme.onSurfaceVariant.withOpacity(0.5);
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
       decoration: BoxDecoration(
@@ -642,12 +632,15 @@ class _ConnectivityTestTileState extends State<_ConnectivityTestTile> {
         contentPadding: const EdgeInsets.symmetric(horizontal: 14),
         leading: Icon(
           Icons.speed_rounded,
-          color: theme.colorScheme.primary,
+          color: labelColor,
           size: 24,
         ),
         title: Text(
-          '连通性测试',
-          style: theme.textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w500),
+          enabled ? '连通性测试' : '连通性测试（需先连接）',
+          style: theme.textTheme.bodyMedium?.copyWith(
+            fontWeight: FontWeight.w500,
+            color: enabled ? null : theme.colorScheme.onSurfaceVariant.withOpacity(0.5),
+          ),
         ),
         trailing: _testing
             ? const SizedBox(
@@ -656,26 +649,29 @@ class _ConnectivityTestTileState extends State<_ConnectivityTestTile> {
                 child: CircularProgressIndicator(strokeWidth: 2),
               )
             : GestureDetector(
-                onTap: _runTest,
+                onTap: enabled ? _runTest : null,
                 child: Container(
                   width: 28,
                   height: 28,
                   decoration: BoxDecoration(
                     shape: BoxShape.circle,
-                    border: Border.all(color: theme.colorScheme.primary, width: 1.5),
+                    border: Border.all(
+                      color: enabled ? theme.colorScheme.primary : Colors.grey.shade400,
+                      width: 1.5,
+                    ),
                   ),
                   alignment: Alignment.center,
                   child: Text(
                     'T',
                     style: TextStyle(
-                      color: theme.colorScheme.primary,
+                      color: enabled ? theme.colorScheme.primary : Colors.grey.shade400,
                       fontSize: 14,
                       fontWeight: FontWeight.w600,
                     ),
                   ),
                 ),
               ),
-        onTap: _runTest,
+        onTap: enabled ? _runTest : null,
       ),
     );
   }
@@ -1050,46 +1046,41 @@ class _ShowcaseFallback extends HookWidget {
     final theme = Theme.of(context);
     final s = AuthI18n.t;
 
-    final nodes = useState<List<Map<String, dynamic>>>(showcaseNodes);
-    final apiFailed = useState(false);
+    final isPaid = userTier == 'vip' || userTier == 'svip';
+
+    // Start with fallback nodes immediately so the user never sees a blank
+    // screen while the API request is in flight (can take 16+ seconds if
+    // all domains are blocked).
+    final initialNodes = showcaseNodes.isNotEmpty
+        ? showcaseNodes
+        : _fallbackNodes.map((n) {
+            final m = Map<String, dynamic>.from(n);
+            if (isPaid) m['locked'] = false;
+            return m;
+          }).toList();
+
+    final nodes = useState<List<Map<String, dynamic>>>(initialNodes);
+    final apiFailed = useState(showcaseNodes.isEmpty);
 
     useEffect(() {
-      if (showcaseNodes.isNotEmpty) { nodes.value = showcaseNodes; return null; }
+      if (showcaseNodes.isNotEmpty) {
+        nodes.value = showcaseNodes;
+        apiFailed.value = false;
+        return null;
+      }
+      // Fire-and-forget API call — fallback nodes are already showing
       () async {
         final prefs = await SharedPreferences.getInstance();
         final auth = AuthService(prefs);
         final fetched = await auth.getShowcaseNodes();
         if (fetched.isNotEmpty) {
           nodes.value = fetched;
-        } else {
-          apiFailed.value = true;
-          final isPaid = userTier == 'vip' || userTier == 'svip';
-          nodes.value = _fallbackNodes.map((n) {
-            final m = Map<String, dynamic>.from(n);
-            if (isPaid) m['locked'] = false;
-            return m;
-          }).toList();
+          apiFailed.value = false;
         }
+        // If fetch returns empty, keep showing _fallbackNodes (already set)
       }();
       return null;
     }, [showcaseNodes]);
-
-    if (nodes.value.isEmpty) {
-      return Center(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(s['connectFirst'] ?? '请先连接', style: theme.textTheme.bodyMedium),
-            const SizedBox(height: 16),
-            FilledButton.icon(
-              onPressed: onConnect,
-              icon: const Icon(Icons.flash_on_rounded, size: 18),
-              label: Text(s['oneClickConnect'] ?? '一键连接'),
-            ),
-          ],
-        ),
-      );
-    }
 
     final isPaidUser = userTier == 'vip' || userTier == 'svip';
 

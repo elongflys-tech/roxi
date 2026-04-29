@@ -89,6 +89,10 @@ class ProxiesOverviewNotifier extends _$ProxiesOverviewNotifier with AppLogger {
       final cached = await ProxiesCache.load();
       if (cached != null) {
         yield await _sortOutbounds(cached, sortBy);
+      } else {
+        // Nothing available — yield null so the UI receives AsyncData(null)
+        // instead of staying stuck in AsyncLoading forever.
+        yield null;
       }
       return;
     }

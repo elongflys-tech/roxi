@@ -231,6 +231,12 @@ class BoxService(
 //        }
         Mobile.stop()
 //        boxService = null
+
+        // Wait for the OS to fully release the TUN interface.
+        // Android kernel needs time to tear down routes and netfilter rules
+        // associated with the previous TUN device. Without this delay,
+        // openTun() fails with "permission denied".
+        delay(1500L)
         
             startService()
         
