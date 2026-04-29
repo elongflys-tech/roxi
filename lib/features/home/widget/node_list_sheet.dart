@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
-import 'package:fpdart/fpdart.dart';
+import 'package:fpdart/fpdart.dart' show Unit;
 import 'package:hiddify/features/auth/data/auth_i18n.dart';
 import 'package:hiddify/features/auth/data/auth_service.dart';
 import 'package:hiddify/features/auth/widget/plans_page.dart';
