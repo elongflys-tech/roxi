@@ -1,0 +1,34 @@
+name: Upload v2rayN macOS to R2
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'v2rayN version (e.g. 7.20.4)'
+        required: true
+        default: '7.20.4'
+
+jobs:
+  upload:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download from GitHub Releases
+        run: |
+          curl -fL -o v2rayN-macos-arm64.zip \
+            "https://github.com/2dust/v2rayN/releases/download/${{ github.event.inputs.version }}/v2rayN-macos-arm64.zip"
+          ls -lh v2rayN-macos-arm64.zip
+
+      - name: Upload to R2
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+        run: |
+          R2_EP="https://bd237e8588122632a186921f28ebdfee.r2.cloudflarestorage.com"
+          pip install awscli -q
+          aws configure set aws_access_key_id "$AWS_ACCESS_KEY_ID"
+          aws configure set aws_secret_access_key "$AWS_SECRET_ACCESS_KEY"
+          aws configure set default.region auto
+          aws s3 cp v2rayN-macos-arm64.zip \
+            "s3://app-downloads/v2rayN-macos-arm64.zip" \
+            --endpoint-url "$R2_EP" --content-type "application/zip"
+          echo "Done! https://dl.roxi.cc/v2rayN-macos-arm64.zip"
