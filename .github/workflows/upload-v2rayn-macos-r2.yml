@@ -1,12 +1,12 @@
-name: Upload v2rayN macOS to R2
+name: Upload Hiddify macOS DMG to R2
 
 on:
   workflow_dispatch:
     inputs:
       version:
-        description: 'v2rayN version (e.g. 7.20.4)'
+        description: 'Hiddify version (e.g. v4.1.1)'
         required: true
-        default: '7.20.4'
+        default: 'v4.1.1'
 
 jobs:
   upload:
@@ -14,9 +14,9 @@ jobs:
     steps:
       - name: Download from GitHub Releases
         run: |
-          curl -fL -o v2rayN-macos-arm64.zip \
-            "https://github.com/2dust/v2rayN/releases/download/${{ github.event.inputs.version }}/v2rayN-macos-arm64.zip"
-          ls -lh v2rayN-macos-arm64.zip
+          curl -fL -o Hiddify-MacOS.dmg \
+            "https://github.com/hiddify/hiddify-app/releases/download/${{ github.event.inputs.version }}/Hiddify-MacOS.dmg"
+          ls -lh Hiddify-MacOS.dmg
 
       - name: Upload to R2
         env:
@@ -28,7 +28,7 @@ jobs:
           aws configure set aws_access_key_id "$AWS_ACCESS_KEY_ID"
           aws configure set aws_secret_access_key "$AWS_SECRET_ACCESS_KEY"
           aws configure set default.region auto
-          aws s3 cp v2rayN-macos-arm64.zip \
-            "s3://app-downloads/v2rayN-macos-arm64.zip" \
-            --endpoint-url "$R2_EP" --content-type "application/zip"
-          echo "Done! https://dl.roxi.cc/v2rayN-macos-arm64.zip"
+          aws s3 cp Hiddify-MacOS.dmg \
+            "s3://app-downloads/Hiddify-MacOS.dmg" \
+            --endpoint-url "$R2_EP" --content-type "application/x-apple-diskimage"
+          echo "Done! https://dl.roxi.cc/Hiddify-MacOS.dmg"
