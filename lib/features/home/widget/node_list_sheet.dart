@@ -529,53 +529,24 @@ class _ListItem {
 // ─────────────────────────────────────────────────────────────────────────────
 // Animated refresh button — blue icon that spins while refreshing
 // ─────────────────────────────────────────────────────────────────────────────
-class _AnimatedRefreshButton extends StatefulWidget {
+class _AnimatedRefreshButton extends StatelessWidget {
   final bool isRefreshing;
   final VoidCallback onPressed;
   const _AnimatedRefreshButton({required this.isRefreshing, required this.onPressed});
-
-  @override
-  State<_AnimatedRefreshButton> createState() => _AnimatedRefreshButtonState();
-}
-
-class _AnimatedRefreshButtonState extends State<_AnimatedRefreshButton>
-    with TickerProviderStateMixin {
-  late final AnimationController _ctrl;
-
-  @override
-  void initState() {
-    super.initState();
-    _ctrl = AnimationController(vsync: this, duration: const Duration(milliseconds: 800));
-    if (widget.isRefreshing) _ctrl.repeat();
-  }
-
-  @override
-  void didUpdateWidget(covariant _AnimatedRefreshButton old) {
-    super.didUpdateWidget(old);
-    if (widget.isRefreshing && !_ctrl.isAnimating) {
-      _ctrl.repeat();
-    } else if (!widget.isRefreshing && _ctrl.isAnimating) {
-      // Finish the current rotation then stop
-      _ctrl.forward().then((_) { if (mounted) _ctrl.reset(); });
-    }
-  }
-
-  @override
-  void dispose() {
-    _ctrl.dispose();
-    super.dispose();
-  }
 
   @override
   Widget build(BuildContext context) {
     final color = Theme.of(context).colorScheme.primary;
     return IconButton(
       tooltip: '刷新订阅',
-      onPressed: widget.isRefreshing ? null : widget.onPressed,
-      icon: RotationTransition(
-        turns: _ctrl,
-        child: Icon(Icons.refresh_rounded, size: 22, color: color),
-      ),
+      onPressed: isRefreshing ? null : onPressed,
+      icon: isRefreshing
+          ? SizedBox(
+              width: 20,
+              height: 20,
+              child: CircularProgressIndicator(strokeWidth: 2, color: color),
+            )
+          : Icon(Icons.refresh_rounded, size: 22, color: color),
     );
   }
 }
@@ -744,7 +715,7 @@ class _SwipeNodeTile extends StatefulWidget {
   State<_SwipeNodeTile> createState() => _SwipeNodeTileState();
 }
 
-class _SwipeNodeTileState extends State<_SwipeNodeTile> with TickerProviderStateMixin {
+class _SwipeNodeTileState extends State<_SwipeNodeTile> with SingleTickerProviderStateMixin {
   AnimationController? _animCtrl;
   Animation<Offset>? _slideAnim;
   bool _showActions = false;

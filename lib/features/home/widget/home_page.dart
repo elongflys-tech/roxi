@@ -445,7 +445,7 @@ class _NewUserGiftButton extends StatefulWidget {
 }
 
 class _NewUserGiftButtonState extends State<_NewUserGiftButton>
-    with TickerProviderStateMixin, WidgetsBindingObserver {
+    with SingleTickerProviderStateMixin, WidgetsBindingObserver {
   late final AnimationController _ctrl;
   late final Animation<double> _bounce;
 
