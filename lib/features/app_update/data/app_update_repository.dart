@@ -1,3 +1,5 @@
+import 'dart:io' show Platform;
+
 import 'package:fpdart/fpdart.dart';
 import 'package:hiddify/core/http_client/dio_http_client.dart';
 import 'package:hiddify/core/model/constants.dart';
@@ -32,8 +34,9 @@ class AppUpdateRepositoryImpl with ExceptionHandler, InfraLogger implements AppU
 
       // Primary: fetch from our own backend API (always up-to-date)
       try {
+        final platform = Platform.operatingSystem; // android, ios, windows, macos, linux
         final response = await httpClient.get<Map<String, dynamic>>(
-          "https://roxi.cc/api/app/version?platform=windows",
+          "https://roxi.cc/api/app/version?platform=$platform",
         );
         if (response.statusCode == 200 && response.data != null) {
           final data = response.data!;
