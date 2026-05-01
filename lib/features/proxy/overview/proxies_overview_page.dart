@@ -109,7 +109,10 @@ class ProxiesOverviewPage extends ConsumerWidget with PresLogger {
       ),
       floatingActionButton: isConnected
           ? FloatingActionButton(
-              onPressed: () async => await ref.read(proxiesOverviewNotifierProvider.notifier).urlTest("select"),
+              onPressed: () async {
+                ref.read(proxiesOverviewNotifierProvider.notifier).unfreezeSort();
+                await ref.read(proxiesOverviewNotifierProvider.notifier).urlTest("select");
+              },
               tooltip: t.pages.proxies.testDelay,
               child: const Icon(FluentIcons.flash_24_filled),
             )

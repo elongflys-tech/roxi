@@ -61,12 +61,25 @@ class ProxiesSortNotifier extends _$ProxiesSortNotifier with AppLogger {
 
 @riverpod
 class ProxiesOverviewNotifier extends _$ProxiesOverviewNotifier with AppLogger {
+  /// When true, incoming stream updates only merge delay/selection data into
+  /// the existing item order instead of re-sorting the list.  This prevents
+  /// the jarring list-jump users see after tapping a node.
+  bool _sortFrozen = false;
+
+  /// The tag-order snapshot captured when sort was frozen.  Stream updates
+  /// preserve this order and only patch delay / isSelected fields.
+  List<String>? _frozenOrder;
+
   @override
   Stream<OutboundGroup?> build() async* {
     ref.disposeDelay(const Duration(seconds: 15));
     ref.watch(coreRestartSignalProvider);
     final serviceRunning = await ref.watch(serviceRunningProvider.future);
     final sortBy = ref.watch(proxiesSortNotifierProvider);
+
+    // Reset freeze state on rebuild (e.g. sort mode changed by user).
+    _sortFrozen = false;
+    _frozenOrder = null;
 
     if (!serviceRunning) {
       // Service not running — try offline parsing of the active profile's
@@ -111,6 +124,12 @@ class ProxiesOverviewNotifier extends _$ProxiesOverviewNotifier with AppLogger {
           // Persist to cache for next cold start.
           if (proxies != null) {
             ProxiesCache.save(proxies);
+          }
+
+          if (_sortFrozen && _frozenOrder != null && proxies != null) {
+            // Sort is frozen — merge fresh delay / selection data into the
+            // existing order so the list doesn't jump around.
+            return _mergeIntoFrozenOrder(proxies);
           }
           return await _sortOutbounds(proxies, sortBy);
         });
@@ -188,15 +207,35 @@ class ProxiesOverviewNotifier extends _$ProxiesOverviewNotifier with AppLogger {
     };
     final items = <OutboundInfo>[];
     for (final item in sortedItems) {
-      // if (groupWithSelected.keys.contains(item.tag)) {
-      //   items.add(item.copyWith(selectedTag: groupWithSelected[item.tag]));
-      // } else {
       items.add(item);
-      // }
     }
     proxies.items.clear();
     proxies.items.addAll(items);
     return proxies;
+  }
+
+  /// Merge fresh data from [incoming] into the frozen tag order.
+  /// Preserves list position; only updates delay, isSelected, ipinfo, etc.
+  OutboundGroup _mergeIntoFrozenOrder(OutboundGroup incoming) {
+    final freshByTag = <String, OutboundInfo>{};
+    for (final item in incoming.items) {
+      freshByTag[item.tag] = item;
+    }
+
+    final merged = <OutboundInfo>[];
+    // First: items in frozen order (preserving position).
+    for (final tag in _frozenOrder!) {
+      final fresh = freshByTag.remove(tag);
+      if (fresh != null) {
+        merged.add(fresh);
+      }
+    }
+    // Then: any new items that weren't in the frozen snapshot (append at end).
+    merged.addAll(freshByTag.values);
+
+    incoming.items.clear();
+    incoming.items.addAll(merged);
+    return incoming;
   }
 
   // Future<void> changeProxy(String groupTag, String outboundTag) async {
@@ -231,6 +270,11 @@ class ProxiesOverviewNotifier extends _$ProxiesOverviewNotifier with AppLogger {
     // Remember previous selection for rollback
     final previousSelected = outbounds.selected;
 
+    // Freeze sort order — capture current tag positions so that incoming
+    // stream updates only patch delay/selection without re-ordering.
+    _frozenOrder = outbounds.items.map((e) => e.tag).toList();
+    _sortFrozen = true;
+
     // Optimistic UI update — show selection immediately
     final newselected = outbounds.items.where((e) => e.tag == outboundTag).firstOrNull;
     if (newselected != null) {
@@ -254,6 +298,9 @@ class ProxiesOverviewNotifier extends _$ProxiesOverviewNotifier with AppLogger {
         }
         outbounds.selected = previousSelected;
         state = AsyncValue.data(outbounds);
+        // Unfreeze on error so next stream update re-sorts normally.
+        _sortFrozen = false;
+        _frozenOrder = null;
       },
       (_) {},
     );
@@ -267,6 +314,17 @@ class ProxiesOverviewNotifier extends _$ProxiesOverviewNotifier with AppLogger {
         loggy.error("error testing group", err);
         throw err;
       }).run();
+      // Unfreeze sort after explicit url-test so the list re-sorts with
+      // fresh delay values on the next stream update.
+      _sortFrozen = false;
+      _frozenOrder = null;
     }
+  }
+
+  /// Unfreeze sort order.  Called externally when the user explicitly
+  /// refreshes the subscription or triggers a full re-sort.
+  void unfreezeSort() {
+    _sortFrozen = false;
+    _frozenOrder = null;
   }
 }

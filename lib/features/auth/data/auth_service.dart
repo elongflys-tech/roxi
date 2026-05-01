@@ -500,6 +500,36 @@ class AuthService {
     }
   }
 
+  /// Delete (deactivate) the current user's account.
+  /// [password] is required for email users, empty for device-only users.
+  /// Returns null on success, or an error message string on failure.
+  Future<String?> deleteAccount({String password = ''}) async {
+    try {
+      final resp = await _postWithFallback(
+        '/api/user/delete-account',
+        headers: _headers,
+        body: jsonEncode({'password': password, 'confirm': 'DELETE'}),
+        timeout: const Duration(seconds: 10),
+      );
+      if (resp != null && resp.statusCode == 200) {
+        // Clear local session
+        await logout();
+        return null;
+      }
+      if (resp != null) {
+        try {
+          final err = jsonDecode(_body(resp));
+          return err['detail']?.toString() ?? '注销失败 (${resp.statusCode})';
+        } catch (_) {
+          return '服务器错误 (${resp.statusCode})';
+        }
+      }
+      return '网络连接失败';
+    } catch (e) {
+      return '网络错误: $e';
+    }
+  }
+
   Future<List<Map<String, dynamic>>> getPlans({bool forceRefresh = false}) async {
     // Return cache if fresh
     if (!forceRefresh &&

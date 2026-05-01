@@ -128,6 +128,7 @@ class NodeListPage extends HookConsumerWidget {
             _AnimatedRefreshButton(
               isRefreshing: isRefreshing,
               onPressed: () {
+                ref.read(proxiesOverviewNotifierProvider.notifier).unfreezeSort();
                 ref.read(updateProfileNotifierProvider(activeProfile.id).notifier)
                     .updateProfile(activeProfile as RemoteProfileEntity);
               },
@@ -233,6 +234,7 @@ class NodeListTabPage extends HookConsumerWidget {
             _AnimatedRefreshButton(
               isRefreshing: isRefreshing,
               onPressed: () {
+                ref.read(proxiesOverviewNotifierProvider.notifier).unfreezeSort();
                 ref.read(updateProfileNotifierProvider(activeProfile.id).notifier)
                     .updateProfile(activeProfile as RemoteProfileEntity);
               },
@@ -360,7 +362,12 @@ class _ConnectedNodeList extends HookConsumerWidget {
             if (!af && bf) return 1;
             return a.compareTo(b);
           });
-        final activeTag = activeProxy?.tag ?? '';
+        // Prefer the optimistic selection from ProxiesOverviewNotifier
+        // (updated instantly on tap) over activeProxyNotifierProvider
+        // (delayed by gRPC round-trip + 2s throttle).
+        final activeTag = (group?.selected.isNotEmpty == true)
+            ? group!.selected
+            : (activeProxy?.tag ?? '');
 
         // Build a flat list of items for ListView.builder (lazy rendering).
         // Each item is either a header, a node tile, or the connectivity test tile.
@@ -384,7 +391,10 @@ class _ConnectedNodeList extends HookConsumerWidget {
               case _ListItemType.connectivityTest:
                 return _ConnectivityTestTile(
                   isConnected: isConnected,
-                  onTest: () => ref.read(proxiesOverviewNotifierProvider.notifier).urlTest("select"),
+                  onTest: () {
+                    ref.read(proxiesOverviewNotifierProvider.notifier).unfreezeSort();
+                    return ref.read(proxiesOverviewNotifierProvider.notifier).urlTest("select");
+                  },
                 );
               case _ListItemType.header:
                 return _SectionHeader(

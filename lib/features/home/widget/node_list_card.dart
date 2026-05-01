@@ -141,6 +141,7 @@ class NodeListCard extends HookConsumerWidget {
                     IconButton(
                       icon: const Icon(Icons.refresh_rounded, size: 20),
                       onPressed: () {
+                        ref.read(proxiesOverviewNotifierProvider.notifier).unfreezeSort();
                         ref.read(updateProfileNotifierProvider(activeProfile.id).notifier)
                             .updateProfile(activeProfile as RemoteProfileEntity);
                       },
@@ -153,6 +154,7 @@ class NodeListCard extends HookConsumerWidget {
                     IconButton(
                     icon: const Icon(Icons.flash_on_rounded, size: 20),
                     onPressed: () async {
+                      ref.read(proxiesOverviewNotifierProvider.notifier).unfreezeSort();
                       await ref.read(proxiesOverviewNotifierProvider.notifier).urlTest("select");
                     },
                     tooltip: '测速',
@@ -179,7 +181,10 @@ class NodeListCard extends HookConsumerWidget {
 
                 // Have real nodes (from offline parsing, cache, or live) — show them
                 if (realNodes.isNotEmpty) {
-                  final activeTag = activeProxy?.tag ?? '';
+                  // Prefer optimistic selection (instant) over activeProxy (delayed).
+                  final activeTag = (group?.selected.isNotEmpty == true)
+                      ? group!.selected
+                      : (activeProxy?.tag ?? '');
                   return Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [

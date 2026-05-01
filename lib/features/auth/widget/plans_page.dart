@@ -595,138 +595,200 @@ Future<void> _showBindEmailPrompt(BuildContext context) async {
   }
 }
 
-/// Inline bind-email dialog (self-contained, no navigation needed).
+/// Inline bind-email bottom sheet (self-contained, no navigation needed).
 Future<void> _showBindEmailDialog(BuildContext context) async {
-  final s = AuthI18n.t;
-  final emailCtrl = TextEditingController();
-  final passCtrl = TextEditingController();
-  final codeCtrl = TextEditingController();
-
-  final result = await showDialog<bool>(
+  final result = await showModalBottomSheet<bool>(
     context: context,
-    builder: (ctx) {
-      int cooldown = 0;
-      String? codeError;
-      return StatefulBuilder(builder: (ctx, setState) {
-        // Countdown tick
-        if (cooldown > 0) {
-          Future.delayed(const Duration(seconds: 1), () {
-            if (ctx.mounted) setState(() { if (cooldown > 0) cooldown--; });
-          });
-        }
-        final theme = Theme.of(ctx);
-        return AlertDialog(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-          title: Text(s['bindEmail'] ?? '绑定邮箱'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(
-                controller: emailCtrl,
-                decoration: InputDecoration(
-                  labelText: s['email'] ?? '邮箱',
-                  border: const OutlineInputBorder(),
-                  isDense: true,
-                ),
-                keyboardType: TextInputType.emailAddress,
-              ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: passCtrl,
-                decoration: InputDecoration(
-                  labelText: s['password'] ?? '密码',
-                  border: const OutlineInputBorder(),
-                  isDense: true,
-                ),
-                obscureText: true,
-              ),
-              const SizedBox(height: 12),
-              Row(children: [
-                Expanded(child: TextField(
-                  controller: codeCtrl,
-                  keyboardType: TextInputType.number,
-                  maxLength: 6,
-                  decoration: InputDecoration(
-                    labelText: s['verifyCode'] ?? '验证码',
-                    border: const OutlineInputBorder(),
-                    isDense: true,
-                    counterText: '',
-                    errorText: codeError,
-                  ),
-                )),
-                const SizedBox(width: 8),
-                SizedBox(height: 44, child: FilledButton.tonal(
-                  onPressed: cooldown > 0 ? null : () async {
-                    final email = emailCtrl.text.trim();
-                    if (email.isEmpty) { setState(() => codeError = '请输入邮箱'); return; }
-                    final prefs = await SharedPreferences.getInstance();
-                    final auth = AuthService(prefs);
-                    final err = await auth.sendVerifyCode(email);
-                    if (err == null) {
-                      setState(() { cooldown = 60; codeError = null; });
-                    } else {
-                      setState(() => codeError = err);
-                    }
-                  },
-                  child: Text(cooldown > 0 ? '${cooldown}s' : '发送', style: const TextStyle(fontSize: 13)),
-                )),
-              ]),
-            ],
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(ctx).pop(false),
-              child: Text(s['cancel'] ?? '取消'),
-            ),
-            FilledButton(
-              onPressed: () async {
-                final email = emailCtrl.text.trim();
-                final pass = passCtrl.text;
-                final code = codeCtrl.text.trim();
-                if (email.isEmpty || pass.length < 6) {
-                  ScaffoldMessenger.of(ctx).showSnackBar(
-                    SnackBar(content: Text(s['passMin6'] ?? '密码至少6位')),
-                  );
-                  return;
-                }
-                if (code.isEmpty) {
-                  setState(() => codeError = '请输入验证码');
-                  return;
-                }
-                try {
-                  final prefs = await SharedPreferences.getInstance();
-                  final auth = AuthService(prefs);
-                  final err = await auth.bindEmail(email, pass, code: code);
-                  if (err == null && ctx.mounted) {
-                    Navigator.of(ctx).pop(true);
-                  } else if (ctx.mounted) {
-                    ScaffoldMessenger.of(ctx).showSnackBar(
-                      SnackBar(content: Text(err ?? '绑定失败')),
-                    );
-                  }
-                } catch (_) {
-                  if (ctx.mounted) {
-                    ScaffoldMessenger.of(ctx).showSnackBar(
-                      SnackBar(content: Text(s['orderFailed'] ?? '绑定失败')),
-                    );
-                  }
-                }
-              },
-              child: Text(s['confirm'] ?? '确认'),
-            ),
-          ],
-        );
-      });
-    },
+    isScrollControlled: true,
+    shape: const RoundedRectangleBorder(
+      borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+    ),
+    builder: (ctx) => Padding(
+      padding: EdgeInsets.only(bottom: MediaQuery.of(ctx).viewInsets.bottom),
+      child: const _BindEmailSheet(),
+    ),
   );
 
-  emailCtrl.dispose();
-  passCtrl.dispose();
-  codeCtrl.dispose();
-
   if (result == true && context.mounted) {
+    final s = AuthI18n.t;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text(s['bindSuccess'] ?? '邮箱绑定成功')),
+    );
+  }
+}
+
+class _BindEmailSheet extends StatefulWidget {
+  const _BindEmailSheet();
+  @override
+  State<_BindEmailSheet> createState() => _BindEmailSheetState();
+}
+
+class _BindEmailSheetState extends State<_BindEmailSheet> {
+  final _emailCtrl = TextEditingController();
+  final _passCtrl = TextEditingController();
+  final _codeCtrl = TextEditingController();
+  bool _obscurePass = true;
+  bool _isLoading = false;
+  int _cooldown = 0;
+  bool _codeSent = false;
+  String? _errorMsg;
+
+  @override
+  void dispose() {
+    _emailCtrl.dispose();
+    _passCtrl.dispose();
+    _codeCtrl.dispose();
+    super.dispose();
+  }
+
+  bool _isValidEmail(String email) =>
+      RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$').hasMatch(email);
+
+  void _startCooldown() {
+    _cooldown = 60;
+    _tick();
+  }
+
+  void _tick() {
+    if (_cooldown <= 0 || !mounted) return;
+    Future.delayed(const Duration(seconds: 1), () {
+      if (!mounted) return;
+      setState(() { _cooldown--; });
+      _tick();
+    });
+  }
+
+  Future<void> _sendCode() async {
+    final email = _emailCtrl.text.trim();
+    if (email.isEmpty) {
+      setState(() => _errorMsg = AuthI18n.t['enterEmail']);
+      return;
+    }
+    if (!_isValidEmail(email)) {
+      setState(() => _errorMsg = AuthI18n.t['invalidEmail']);
+      return;
+    }
+    setState(() => _errorMsg = null);
+    final prefs = await SharedPreferences.getInstance();
+    final err = await AuthService(prefs).sendVerifyCode(email);
+    if (!mounted) return;
+    if (err == null) {
+      setState(() { _codeSent = true; });
+      _startCooldown();
+    } else {
+      setState(() => _errorMsg = err);
+    }
+  }
+
+  Future<void> _submit() async {
+    final s = AuthI18n.t;
+    final email = _emailCtrl.text.trim();
+    final pass = _passCtrl.text;
+    final code = _codeCtrl.text.trim();
+
+    if (email.isEmpty || !_isValidEmail(email)) {
+      setState(() => _errorMsg = s['invalidEmail']);
+      return;
+    }
+    if (pass.length < 6) {
+      setState(() => _errorMsg = s['passMin6']);
+      return;
+    }
+    if (code.isEmpty) {
+      setState(() => _errorMsg = s['enterCode']);
+      return;
+    }
+
+    setState(() { _isLoading = true; _errorMsg = null; });
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final err = await AuthService(prefs).bindEmail(email, pass, code: code);
+      if (!mounted) return;
+      if (err == null) {
+        Navigator.of(context).pop(true);
+      } else {
+        setState(() { _isLoading = false; _errorMsg = err; });
+      }
+    } catch (_) {
+      if (!mounted) return;
+      setState(() { _isLoading = false; _errorMsg = s['bindFailed']; });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final s = AuthI18n.t;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 16, 20, 20),
+      child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Center(child: Container(width: 36, height: 4, decoration: BoxDecoration(color: Colors.grey.shade300, borderRadius: BorderRadius.circular(2)))),
+        const SizedBox(height: 16),
+        Text(s['bindEmail'] ?? '绑定邮箱', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
+        const SizedBox(height: 16),
+        TextField(
+          controller: _emailCtrl,
+          keyboardType: TextInputType.emailAddress,
+          decoration: InputDecoration(
+            labelText: s['email'] ?? '邮箱',
+            prefixIcon: const Icon(Icons.email_outlined, size: 20),
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+            isDense: true,
+          ),
+        ),
+        const SizedBox(height: 12),
+        TextField(
+          controller: _passCtrl,
+          obscureText: _obscurePass,
+          decoration: InputDecoration(
+            labelText: s['password'] ?? '密码',
+            prefixIcon: const Icon(Icons.lock_outlined, size: 20),
+            suffixIcon: IconButton(
+              icon: Icon(_obscurePass ? Icons.visibility_off_outlined : Icons.visibility_outlined, size: 20),
+              onPressed: () => setState(() => _obscurePass = !_obscurePass),
+            ),
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+            isDense: true,
+          ),
+        ),
+        const SizedBox(height: 12),
+        Row(children: [
+          Expanded(child: TextField(
+            controller: _codeCtrl,
+            keyboardType: TextInputType.number,
+            maxLength: 6,
+            decoration: InputDecoration(
+              labelText: s['verifyCode'] ?? '验证码',
+              prefixIcon: const Icon(Icons.verified_outlined, size: 20),
+              counterText: '',
+              border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+              isDense: true,
+            ),
+          )),
+          const SizedBox(width: 8),
+          SizedBox(height: 44, child: FilledButton.tonal(
+            onPressed: _cooldown > 0 ? null : _sendCode,
+            child: Text(
+              _cooldown > 0 ? '${_cooldown}s' : (_codeSent ? (s['resendBtn'] ?? '重发') : (s['sendBtn'] ?? '发送')),
+              style: const TextStyle(fontSize: 13),
+            ),
+          )),
+        ]),
+        if (_errorMsg != null) ...[
+          const SizedBox(height: 8),
+          Text(_errorMsg!, style: const TextStyle(color: Colors.red, fontSize: 12)),
+        ],
+        const SizedBox(height: 16),
+        SizedBox(width: double.infinity, child: FilledButton(
+          onPressed: _isLoading ? null : _submit,
+          style: FilledButton.styleFrom(
+            padding: const EdgeInsets.symmetric(vertical: 14),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+          ),
+          child: _isLoading
+              ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+              : Text(s['confirm'] ?? '确认'),
+        )),
+      ]),
     );
   }
 }
