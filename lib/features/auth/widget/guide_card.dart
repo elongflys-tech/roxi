@@ -20,9 +20,10 @@ class GuideCard extends HookWidget {
       () async {
         final prefs = await SharedPreferences.getInstance();
         final auth = AuthService(prefs);
-        final user = await auth.getUserInfo();
-        if (user != null) {
-          inviteCode.value = user['invite_code'] as String?;
+        // Use cached invite info first (instant), then refresh in background
+        final cached = await auth.getInviteInfo();
+        if (cached != null) {
+          inviteCode.value = cached['invite_code'] as String?;
         }
       }();
       return null;

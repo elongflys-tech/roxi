@@ -86,41 +86,53 @@ class _PlansSheet extends HookWidget {
       constraints: BoxConstraints(
         maxHeight: MediaQuery.of(context).size.height * 0.92,
       ),
-      decoration: BoxDecoration(
-        color: theme.colorScheme.surface,
-        borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+      decoration: const BoxDecoration(
+        color: Color(0xFF12122A),
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
       child: Column(
         mainAxisSize: MainAxisSize.max,
         children: [
-          // Handle bar + close
+          // Handle bar + title + close
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 12, 8, 0),
             child: Row(
               children: [
+                const SizedBox(width: 40), // balance the close button
                 const Spacer(),
                 Container(
                   width: 36, height: 4,
                   decoration: BoxDecoration(
-                    color: theme.colorScheme.onSurfaceVariant.withOpacity(0.3),
+                    color: Colors.white.withOpacity(0.2),
                     borderRadius: BorderRadius.circular(2),
                   ),
                 ),
                 const Spacer(),
                 IconButton(
-                  icon: const Icon(Icons.close),
+                  icon: const Icon(Icons.close, color: Colors.white70),
                   onPressed: () => Navigator.of(context).pop(),
                 ),
               ],
             ),
           ),
-          Text(
-            s['unlockNodes']!,
-            style: theme.textTheme.bodySmall?.copyWith(
-              color: theme.colorScheme.onSurfaceVariant,
+          Padding(
+            padding: const EdgeInsets.only(bottom: 4),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const Text('💎 ', style: TextStyle(fontSize: 18)),
+                Text(
+                  s['buyPlan'] ?? '购买套餐',
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ],
             ),
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: 8),
           // Countdown banner
           if (remainingSec.value != null && remainingSec.value! > 0)
             _CountdownBanner(
@@ -131,7 +143,7 @@ class _PlansSheet extends HookWidget {
           if (isLoading.value)
             const Padding(
               padding: EdgeInsets.all(32),
-              child: Center(child: CircularProgressIndicator()),
+              child: Center(child: CircularProgressIndicator(color: Colors.white54)),
             )
           else if (loadError.value || plans.value.isEmpty)
             Padding(
@@ -140,16 +152,20 @@ class _PlansSheet extends HookWidget {
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Icon(Icons.cloud_off_rounded, size: 40, color: Colors.grey.shade400),
+                    Icon(Icons.cloud_off_rounded, size: 40, color: Colors.grey.shade600),
                     const SizedBox(height: 12),
                     Text(
                       s['plansLoadFailed'] ?? '加载套餐失败，请检查网络',
-                      style: TextStyle(color: Colors.grey.shade600, fontSize: 14),
+                      style: TextStyle(color: Colors.grey.shade400, fontSize: 14),
                       textAlign: TextAlign.center,
                     ),
                     const SizedBox(height: 16),
-                    FilledButton.tonal(
+                    OutlinedButton(
                       onPressed: loadPlans,
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: Colors.white70,
+                        side: BorderSide(color: Colors.white.withOpacity(0.3)),
+                      ),
                       child: Text(s['retry'] ?? '重试'),
                     ),
                   ],
@@ -158,22 +174,20 @@ class _PlansSheet extends HookWidget {
             )
           else
             Flexible(
-              child: ListView.builder(
-                padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
-                shrinkWrap: true,
-                itemCount: plans.value.length,
-                itemBuilder: (ctx, i) => _PlanCard(
-                  plan: plans.value[i],
-                  isSelected: selectedIndex.value == i,
-                  onTap: () => selectedIndex.value = i,
-                  onBuy: () {
-                    selectedIndex.value = i;
-                    _handleBuy(context, plans.value[i]);
-                  },
-                  discountActive: remainingSec.value != null && remainingSec.value! > 0,
-                ),
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.fromLTRB(16, 4, 16, 24),
+                child: _buildPlanSections(context, plans.value, selectedIndex, remainingSec.value),
               ),
             ),
+          // Footer — supported payment methods
+          Padding(
+            padding: const EdgeInsets.only(bottom: 16, top: 4),
+            child: Text(
+              s['payMethodsHint'] ?? '支持 USDT / USDC 多链 · 支付宝 · 微信 · 余额支付',
+              style: TextStyle(color: Colors.grey.shade600, fontSize: 11),
+              textAlign: TextAlign.center,
+            ),
+          ),
         ],
       ),
     );
@@ -204,7 +218,7 @@ class _PlansSheet extends HookWidget {
         String title;
         if (currentTier == 'svip' && planTier == 'vip') {
           // Downgrade purchase
-          title = '⚠️ 降级购买提醒';
+          title = s['downgradeTitle'] ?? '⚠️ 降级购买提醒';
           msg = '您当前是 $currentLabel 会员（到期：$expShort）\n\n'
               '购买 $newLabel 套餐后：\n'
               '• $currentLabel 到期前继续享受 $currentLabel 权益\n'
@@ -212,12 +226,12 @@ class _PlansSheet extends HookWidget {
               '• 新购天数叠加到总到期时间上';
         } else if (currentTier == planTier) {
           // Same tier renewal
-          title = '续费确认';
+          title = s['renewTitle'] ?? '续费确认';
           msg = '您当前是 $currentLabel 会员（到期：$expShort）\n\n'
               '新购天数将叠加到现有到期时间上。';
         } else {
           // Upgrade purchase
-          title = '升级确认';
+          title = s['upgradeTitle'] ?? '升级确认';
           msg = '您当前是 $currentLabel 会员（到期：$expShort）\n\n'
               '升级为 $newLabel 后立即生效，剩余 $currentLabel 天数将按价格比例折算为 $newLabel 天数。';
         }
@@ -234,7 +248,7 @@ class _PlansSheet extends HookWidget {
               ),
               FilledButton(
                 onPressed: () => Navigator.of(ctx).pop(true),
-                child: const Text('继续购买'),
+                child: Text(s['continueBuy'] ?? '继续购买'),
               ),
             ],
           ),
@@ -263,14 +277,8 @@ class _PlansSheet extends HookWidget {
       }
       await _handleCryptoBuy(context, plan, chain: chain, token: token);
     } else {
-      // CNY payment (alipay/wechat) — pick gateway channel
-      if (!context.mounted) return;
-      final gateway = await showModalBottomSheet<String>(
-        context: context,
-        builder: (ctx) => _GatewayPicker(),
-      );
-      if (gateway == null || !context.mounted) return;
-      await _handleCNYBuy(context, plan, method, gateway: gateway);
+      // CNY payment (alipay/wechat) — auto gateway: try xm first, fallback to jlb
+      await _handleCNYBuy(context, plan, method);
     }
   }
 
@@ -346,7 +354,7 @@ class _PlansSheet extends HookWidget {
     }
   }
 
-  Future<void> _handleCNYBuy(BuildContext context, Map<String, dynamic> plan, String channel, {String gateway = 'xm'}) async {
+  Future<void> _handleCNYBuy(BuildContext context, Map<String, dynamic> plan, String channel) async {
     final s = AuthI18n.t;
     final prefs = await SharedPreferences.getInstance();
     final auth = AuthService(prefs);
@@ -367,7 +375,18 @@ class _PlansSheet extends HookWidget {
     }
 
     try {
-      final result = await auth.createCNYOrder(plan['id'], channel, gateway: gateway).timeout(const Duration(seconds: 15));
+      // Auto gateway: try xm (通道1) first, fallback to jlb (通道2) on failure.
+      // Matches web frontend behavior — user never sees gateway selection.
+      Map<String, dynamic>? result;
+      result = await auth.createCNYOrder(plan['id'], channel, gateway: 'xm').timeout(const Duration(seconds: 15));
+
+      // If xm failed, auto-fallback to jlb
+      if (result == null || result['error'] == true || (result['pay_url'] as String? ?? '').isEmpty) {
+        debugPrint('CNY gateway xm failed: ${result?['detail']}, trying jlb...');
+        if (!context.mounted) return;
+        result = await auth.createCNYOrder(plan['id'], channel, gateway: 'jlb').timeout(const Duration(seconds: 15));
+      }
+
       if (!context.mounted) return;
       dismissLoading();
 
@@ -402,7 +421,7 @@ class _PlansSheet extends HookWidget {
           orderNo: orderNo,
           planName: plan['name'] ?? '',
           channel: channel,
-          amount: (result['amount_cny'] as num?)?.toDouble() ?? 0,
+          amount: (result!['amount_cny'] as num?)?.toDouble() ?? 0,
         ),
       );
       // Always refresh user info after payment dialog closes
@@ -422,6 +441,113 @@ class _PlansSheet extends HookWidget {
         );
       }
     }
+  }
+
+  /// Build VIP and SVIP sections with grid layout (matching web design).
+  Widget _buildPlanSections(
+    BuildContext context,
+    List<Map<String, dynamic>> plans,
+    ValueNotifier<int?> selectedIndex,
+    int? remainingSec,
+  ) {
+    final s = AuthI18n.t;
+    final discountActive = remainingSec != null && remainingSec > 0;
+
+    // Split plans by tier
+    final vipPlans = <int, Map<String, dynamic>>{};
+    final svipPlans = <int, Map<String, dynamic>>{};
+    for (int i = 0; i < plans.length; i++) {
+      final tier = plans[i]['tier'] ?? 'vip';
+      if (tier == 'svip') {
+        svipPlans[i] = plans[i];
+      } else {
+        vipPlans[i] = plans[i];
+      }
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // VIP section
+        if (vipPlans.isNotEmpty) ...[
+          Padding(
+            padding: const EdgeInsets.only(bottom: 12, top: 4),
+            child: Row(
+              children: [
+                const Text('⭐ ', style: TextStyle(fontSize: 16)),
+                Text(
+                  'VIP',
+                  style: const TextStyle(
+                    color: Color(0xFFD4A017),
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          _buildPlanGrid(context, vipPlans, selectedIndex, discountActive),
+        ],
+        // SVIP section
+        if (svipPlans.isNotEmpty) ...[
+          Padding(
+            padding: const EdgeInsets.only(bottom: 12, top: 16),
+            child: Row(
+              children: [
+                const Text('🔥 ', style: TextStyle(fontSize: 16)),
+                Text(
+                  'SVIP',
+                  style: const TextStyle(
+                    color: Color(0xFFFF6B9D),
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          _buildPlanGrid(context, svipPlans, selectedIndex, discountActive),
+        ],
+      ],
+    );
+  }
+
+  /// Build a responsive grid of plan cards (2 columns on phone, 3 on wide screens).
+  Widget _buildPlanGrid(
+    BuildContext context,
+    Map<int, Map<String, dynamic>> indexedPlans,
+    ValueNotifier<int?> selectedIndex,
+    bool discountActive,
+  ) {
+    final entries = indexedPlans.entries.toList();
+    final screenWidth = MediaQuery.of(context).size.width;
+    final crossAxisCount = screenWidth > 600 ? 3 : (entries.length <= 2 ? 2 : 3);
+
+    return GridView.builder(
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+        crossAxisCount: crossAxisCount,
+        crossAxisSpacing: 10,
+        mainAxisSpacing: 10,
+        childAspectRatio: 0.62,
+      ),
+      itemCount: entries.length,
+      itemBuilder: (ctx, i) {
+        final globalIdx = entries[i].key;
+        final plan = entries[i].value;
+        return _PlanCard(
+          plan: plan,
+          isSelected: selectedIndex.value == globalIdx,
+          onTap: () => selectedIndex.value = globalIdx,
+          onBuy: () {
+            selectedIndex.value = globalIdx;
+            _handleBuy(context, plan);
+          },
+          discountActive: discountActive,
+        );
+      },
+    );
   }
 }
 
@@ -683,145 +809,186 @@ class _PlanCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
     final s = AuthI18n.t;
     final tier = plan['tier'] ?? 'vip';
     final isVip = tier == 'vip';
-    final trafficGb = plan['traffic_gb'] ?? 0;
-    final trafficText = trafficGb == 0 ? s['unlimited']! : '${trafficGb.toStringAsFixed(0)}GB';
-    final discountLabel = plan['discount_label'] as String?;
-    final discountCny = plan['discount_price_cny'];
-    final hasDiscount = discountActive && discountLabel != null && discountCny != null;
-    final nameHasDiscount = (plan['name'] ?? '').toString().contains('折');
-    final showDiscountBadge = hasDiscount && !nameHasDiscount;
     final days = (plan['days'] as num?)?.toInt() ?? 0;
-    final isRecommended = !isVip && days <= 3;
-    final actualPrice = hasDiscount ? (discountCny as num).toDouble() : ((plan['price_cny'] as num?)?.toDouble() ?? 0);
+    final priceCny = (plan['price_cny'] as num?)?.toDouble() ?? 0;
+    final discountCny = plan['discount_price_cny'];
+    final discountLabel = plan['discount_label'] as String?;
+    final hasDiscount = discountActive && discountLabel != null && discountCny != null;
+    final actualPrice = hasDiscount ? (discountCny as num).toDouble() : priceCny;
     final perDay = days > 0 ? actualPrice / days : 0.0;
-    final perDayText = '约 ¥${perDay.toStringAsFixed(1)}/天';
+    final usdApprox = (actualPrice / 7.1).toStringAsFixed(1);
+    final isRecommended = days >= 365;
 
-    return Card(
-      margin: const EdgeInsets.only(bottom: 6),
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
-        side: isSelected
-            ? BorderSide(color: theme.colorScheme.primary, width: 1.5)
-            : isVip
-                ? BorderSide.none
-                : BorderSide(color: Colors.amber.withOpacity(0.5)),
-      ),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(12),
-        onTap: () {
-          onTap?.call();
-          onBuy();
-        },
+    // Colors matching the web design
+    final cardBg = const Color(0xFF1E1E3A);
+    final borderColor = isSelected
+        ? (isVip ? const Color(0xFFD4A017) : const Color(0xFFFF6B9D))
+        : Colors.transparent;
+    final buttonGradient = isVip
+        ? const [Color(0xFF7B2FBE), Color(0xFFE040FB)]
+        : const [Color(0xFFFF6B35), Color(0xFFFF1493)];
+
+    return GestureDetector(
+      onTap: () {
+        onTap?.call();
+        onBuy();
+      },
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 10),
+        decoration: BoxDecoration(
+          color: cardBg,
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(
+            color: borderColor,
+            width: isSelected ? 1.5 : 0.5,
+          ),
+          boxShadow: isSelected
+              ? [BoxShadow(color: borderColor.withOpacity(0.3), blurRadius: 12, spreadRadius: 1)]
+              : null,
+        ),
         child: Stack(
+          clipBehavior: Clip.none,
           children: [
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-            child: Row(
-              children: [
-                CircleAvatar(
-                  radius: 16,
-                  backgroundColor: isVip
-                      ? theme.colorScheme.primaryContainer
-                      : Colors.amber.withOpacity(0.2),
-                  child: Text(
-                    isVip ? 'V' : 'S',
+            Padding(
+              padding: const EdgeInsets.fromLTRB(12, 16, 12, 10),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  // Days label
+                  Text(
+                    '${days}${s['days'] ?? '天'}',
                     style: TextStyle(
-                      fontWeight: FontWeight.bold,
+                      color: Colors.grey.shade400,
                       fontSize: 13,
-                      color: isVip ? theme.colorScheme.primary : Colors.amber,
                     ),
                   ),
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        children: [
-                          Text(plan['name'] ?? '', style: theme.textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600)),
-                          if (showDiscountBadge) ...[
-                            const SizedBox(width: 6),
-                            Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
-                              decoration: BoxDecoration(
-                                color: Colors.red.shade50,
-                                borderRadius: BorderRadius.circular(4),
-                                border: Border.all(color: Colors.red.shade200),
-                              ),
-                              child: Text(
-                                '九折',
-                                style: TextStyle(fontSize: 9, color: Colors.red.shade700, fontWeight: FontWeight.w600),
-                              ),
-                            ),
-                          ],
-                        ],
-                      ),
-                      const SizedBox(height: 1),
-                      Text(
-                        perDayText,
-                        style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant, fontSize: 11),
-                      ),
-                    ],
-                  ),
-                ),
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.end,
-                  children: [
-                    if (hasDiscount) ...[
-                      Text(
-                        '¥${plan['price_cny']}',
-                        style: theme.textTheme.bodySmall?.copyWith(
-                          decoration: TextDecoration.lineThrough,
-                          color: theme.colorScheme.onSurfaceVariant,
-                          fontSize: 11,
+                  const SizedBox(height: 4),
+                  // Main price — large and bold
+                  FittedBox(
+                    fit: BoxFit.scaleDown,
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Padding(
+                          padding: const EdgeInsets.only(top: 6),
+                          child: Text('¥', style: TextStyle(
+                            color: Colors.white.withOpacity(0.9),
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                          )),
                         ),
-                      ),
-                    ],
-                    FilledButton.tonal(
-                      onPressed: onBuy,
-                      style: FilledButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                        minimumSize: const Size(64, 36),
-                        backgroundColor: hasDiscount ? Colors.red.shade400 : null,
-                        foregroundColor: hasDiscount ? Colors.white : null,
-                      ),
-                      child: Text(
-                        hasDiscount ? '¥$discountCny' : '¥${plan['price_cny']}',
-                        style: const TextStyle(fontSize: 13),
+                        Text(
+                          hasDiscount
+                              ? '${(discountCny as num).toInt()}'
+                              : '${priceCny.toInt()}',
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 36,
+                            fontWeight: FontWeight.w800,
+                            height: 1.1,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  // Original price (strikethrough) if discounted
+                  if (hasDiscount) ...[
+                    const SizedBox(height: 2),
+                    Text(
+                      '¥${priceCny.toInt()}',
+                      style: TextStyle(
+                        color: Colors.grey.shade500,
+                        fontSize: 13,
+                        decoration: TextDecoration.lineThrough,
+                        decorationColor: Colors.grey.shade500,
                       ),
                     ),
                   ],
-                ),
-              ],
-            ),
-          ),
-          // "推荐" badge for annual plan
-          if (isRecommended)
-            Positioned(
-              top: 0,
-              right: 12,
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                decoration: BoxDecoration(
-                  color: theme.colorScheme.primary,
-                  borderRadius: const BorderRadius.only(
-                    bottomLeft: Radius.circular(6),
-                    bottomRight: Radius.circular(6),
+                  const SizedBox(height: 4),
+                  // USD approximation
+                  Text(
+                    '≈ \$$usdApprox',
+                    style: TextStyle(
+                      color: Colors.grey.shade500,
+                      fontSize: 12,
+                    ),
                   ),
-                ),
-                child: const Text(
-                  '推荐',
-                  style: TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.w600),
-                ),
+                  const SizedBox(height: 2),
+                  // Per-day cost — green for VIP, orange for SVIP
+                  Text(
+                    '¥${perDay.toStringAsFixed(perDay < 1 ? 2 : 1)}/${s['perDay'] ?? '天'}',
+                    style: TextStyle(
+                      color: isVip ? const Color(0xFF4CAF50) : const Color(0xFFFF9800),
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  const Spacer(),
+                  // Gradient buy button
+                  Container(
+                    width: double.infinity,
+                    height: 38,
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(colors: buttonGradient),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Material(
+                      color: Colors.transparent,
+                      child: InkWell(
+                        borderRadius: BorderRadius.circular(8),
+                        onTap: onBuy,
+                        child: Center(
+                          child: Text(
+                            s['buyNow'] ?? '立即购买',
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.w600,
+                              fontSize: 14,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
               ),
             ),
-        ],
-      ),
+            // "推荐" badge — top center
+            if (isRecommended)
+              Positioned(
+                top: -10,
+                left: 0,
+                right: 0,
+                child: Center(
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 3),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF4CAF50),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Text('⭐ ', style: TextStyle(fontSize: 10)),
+                        Text(
+                          s['recommended'] ?? '推荐',
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 11,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+          ],
+        ),
       ),
     );
   }
@@ -1094,67 +1261,6 @@ class _PayMethodPicker extends StatelessWidget {
                   ),
                 ],
               ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-/// Gateway (payment channel) picker — 通道1 熊猫 (default) / 通道2 JLB (backup)
-class _GatewayPicker extends StatelessWidget {
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return SafeArea(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Container(
-                  width: 36, height: 4,
-                  decoration: BoxDecoration(
-                    color: theme.colorScheme.onSurfaceVariant.withOpacity(0.3),
-                    borderRadius: BorderRadius.circular(2),
-                  ),
-                ),
-                const SizedBox(height: 16),
-                Text(AuthI18n.t['selectGateway'] ?? '选择支付通道', style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold)),
-                const SizedBox(height: 4),
-                Text(
-                  AuthI18n.t['gatewayHint'] ?? '如通道1无法支付，请尝试通道2',
-                  style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant),
-                ),
-                const SizedBox(height: 12),
-              ],
-            ),
-          ),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                _PayMethodTile(
-                  icon: Icons.flash_on_rounded,
-                  color: const Color(0xFFFF6B35),
-                  label: AuthI18n.t['gateway1'] ?? '通道 1',
-                  subtitle: AuthI18n.t['recommended'] ?? '推荐',
-                  onTap: () => Navigator.of(context).pop('xm'),
-                ),
-                const SizedBox(height: 8),
-                _PayMethodTile(
-                  icon: Icons.swap_horiz_rounded,
-                  color: const Color(0xFF8888AA),
-                  label: AuthI18n.t['gateway2'] ?? '通道 2 (备用)',
-                  subtitle: '',
-                  onTap: () => Navigator.of(context).pop('jlb'),
-                ),
-              ],
             ),
           ),
         ],

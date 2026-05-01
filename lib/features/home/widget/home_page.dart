@@ -12,7 +12,6 @@ import 'package:hiddify/features/auth/widget/guide_card.dart';
 import 'package:hiddify/features/auth/widget/update_dialog.dart';
 import 'package:hiddify/core/model/constants.dart';
 import 'package:hiddify/features/auth/widget/profile_page.dart';
-import 'package:hiddify/features/auth/widget/network_error_dialog.dart';
 import 'package:hiddify/features/auth/widget/trial_expired_dialog.dart';
 import 'package:hiddify/features/auth/widget/user_avatar_badge.dart';
 import 'package:hiddify/features/auth/widget/plans_page.dart';
@@ -44,94 +43,97 @@ class HomePage extends HookConsumerWidget {
     final isPaidUser = useState(false);
     final userTier = useState<String>('free');
 
-    // Check trial status on mount
+    // Render cached state immediately on mount — no network wait.
+    // Then refresh from API in the background.
     useEffect(() {
       () async {
-        final hasNetwork = await checkNetwork();
-        if (!hasNetwork && context.mounted) {
-          Future.delayed(const Duration(milliseconds: 300), () async {
-            if (!context.mounted) return;
-            final retry = await showNetworkErrorDialog(context);
-            if (retry && context.mounted) {
-              trialChecked.value = false;
-              trialChecked.value = true;
-            }
-          });
-          return;
-        }
         try {
           final prefs = await SharedPreferences.getInstance();
           final auth = AuthService(prefs);
-          if (!auth.isLoggedIn) return;
-
-          // Use cached tier immediately for instant UI (no flicker)
-          final ct = auth.cachedTier;
-          if (ct == 'vip' || ct == 'svip') {
-            userTier.value = ct;
-            isPaidUser.value = true;
+          if (!auth.isLoggedIn) {
+            trialChecked.value = true;
+            return;
           }
 
-          // Fire all API calls in parallel
-          final results = await Future.wait([
+          // ── Instant UI from cache (zero network wait) ──
+          final ct = auth.cachedTier;
+          final cs = auth.cachedStatus;
+          if (ct == 'vip' || ct == 'svip') {
+            userTier.value = ct;
+            isPaidUser.value = cs != 'expired';
+          }
+          if (cs.isNotEmpty) {
+            trialStatus.value = cs;
+          }
+          final ced = prefs.getString('roxi_cached_expire_date');
+          if (ced != null && ced.isNotEmpty) {
+            expireDate.value = ced;
+          }
+          trialChecked.value = true; // UI renders immediately with cached data
+
+          // ── Background refresh — non-blocking, updates UI when done ──
+          // Fire all API calls in parallel. Don't await before showing UI.
+          Future.wait([
             auth.getTrialStatus(),
             auth.getUserInfo(),
             auth.checkAppUpdate(),
-          ], eagerError: false);
+          ], eagerError: false).then((results) {
+            if (!context.mounted) return;
 
-          final status = results[0] as Map<String, dynamic>?;
-          final userInfoResult = results[1] as Map<String, dynamic>?;
-          final updateInfo = results[2] as Map<String, dynamic>?;
+            final status = results[0] as Map<String, dynamic>?;
+            final userInfoResult = results[1] as Map<String, dynamic>?;
+            final updateInfo = results[2] as Map<String, dynamic>?;
 
-          // Process trial status
-          if (status != null) {
-            trialStatus.value = status['status'] as String?;
-            trialChecked.value = true;
-            if (status['status'] == 'paid') {
-              isPaidUser.value = true;
+            // Process trial status
+            if (status != null) {
+              trialStatus.value = status['status'] as String?;
+              if (status['status'] == 'paid') {
+                isPaidUser.value = true;
+              }
+              if (status['status'] == 'expired' && context.mounted) {
+                Future.delayed(const Duration(milliseconds: 500), () {
+                  if (context.mounted) showTrialExpiredDialog(context);
+                });
+              }
             }
-            if (status['status'] == 'expired' && context.mounted) {
-              Future.delayed(const Duration(milliseconds: 500), () {
-                if (context.mounted) showTrialExpiredDialog(context);
-              });
-            }
-          } else {
-            trialChecked.value = true;
-          }
 
-          // Process user info
-          if (userInfoResult != null) {
-            final tier = userInfoResult['tier'] as String? ?? 'free';
-            userTier.value = tier;
-            if (tier == 'vip' || tier == 'svip') {
-              isPaidUser.value = true;
+            // Process user info
+            if (userInfoResult != null) {
+              final tier = userInfoResult['tier'] as String? ?? 'free';
+              userTier.value = tier;
+              if (tier == 'vip' || tier == 'svip') {
+                isPaidUser.value = true;
+              }
+              final ed = userInfoResult['expire_date'];
+              if (ed != null && ed.toString().isNotEmpty) {
+                expireDate.value = ed.toString();
+              }
             }
-            final ed = userInfoResult['expire_date'];
-            if (ed != null && ed.toString().isNotEmpty) {
-              expireDate.value = ed.toString();
-            }
-          }
 
-          // Prefetch plans so the sheet opens instantly (fire-and-forget)
-          auth.getPlans(); auth.getShowcaseNodes();
-          auth.refreshToken();
+            // Prefetch plans so the sheet opens instantly (fire-and-forget)
+            auth.getPlans(); auth.getShowcaseNodes();
+            auth.refreshToken();
 
-          // Process update check
-          if (updateInfo != null) {
-            final serverCode = updateInfo['latest_version_code'] as int? ?? 0;
-            if (serverCode > Constants.appVersionCode && context.mounted) {
-              Future.delayed(const Duration(milliseconds: 800), () {
-                if (context.mounted) {
-                  showUpdateDialog(
-                    context,
-                    latestVersion: updateInfo['latest_version'] ?? '',
-                    downloadUrl: updateInfo['download_url'] ?? '',
-                    changelog: updateInfo['changelog'],
-                    force: updateInfo['force_update'] == true,
-                  );
-                }
-              });
+            // Process update check
+            if (updateInfo != null) {
+              final serverCode = updateInfo['latest_version_code'] as int? ?? 0;
+              if (serverCode > Constants.appVersionCode && context.mounted) {
+                Future.delayed(const Duration(milliseconds: 800), () {
+                  if (context.mounted) {
+                    showUpdateDialog(
+                      context,
+                      latestVersion: updateInfo['latest_version'] ?? '',
+                      downloadUrl: updateInfo['download_url'] ?? '',
+                      changelog: updateInfo['changelog'],
+                      force: updateInfo['force_update'] == true,
+                    );
+                  }
+                });
+              }
             }
-          }
+          }).catchError((_) {
+            // Network failed — cached data already shown, nothing to do
+          });
         } catch (_) {
           trialChecked.value = true;
         }

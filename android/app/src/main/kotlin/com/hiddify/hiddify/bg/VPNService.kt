@@ -89,7 +89,12 @@ class VPNService : VpnService(), PlatformInterfaceWrapper {
         if (!hasPermission) {
              error("android: missing vpn permission")
     }
-//        service.fileDescriptor?.close()
+        // Close the previous TUN file descriptor before creating a new one.
+        // Without this, the Android system may still consider the old VPN
+        // interface active, causing "configure tun interface: permission denied"
+        // when sing-box tries to set up the new TUN device on restart.
+        service.fileDescriptor?.close()
+        service.fileDescriptor = null
 
         val builder = Builder()
             .setSession("hiddify")

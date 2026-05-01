@@ -4,17 +4,21 @@ import 'package:hiddify/features/auth/data/auth_service.dart';
 import 'package:hiddify/features/profile/data/profile_data_providers.dart';
 import 'package:hiddify/features/profile/model/profile_entity.dart';
 import 'package:hiddify/utils/custom_loggers.dart';
+import 'package:hiddify/bootstrap.dart' show postSplashSubImportStarted;
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 part 'auto_sub_import.g.dart';
 
-/// Two real VLESS xhttp bootstrap nodes hardcoded in APK.
+/// Bootstrap VLESS xhttp nodes hardcoded in APK.
 /// Used as last-resort when ALL API domains (roxi.cc, roxijet.cloud, wizzegroup.com) are blocked.
 /// Once connected via these, the app auto-retries fetching the real subscription.
+/// 4 nodes on different IPs for better survivability against IP-level blocking.
 const _bootstrapVlessNodes = [
   'vless://94134baf-dab3-41dc-9c15-085fdf15b86e@168.231.126.166:443?hiddify=1&sni=168.231.126.166&type=xhttp&alpn=http%2F1.1&path=%2FlY4xhKGq8xfNOWdIEmY7Q&host=168.231.126.166&encryption=none&fp=chrome&core=xray&extra=%7B%22headers%22%3A%7B%7D%7D&headerType=none&allowInsecure=true&insecure=true&security=tls#%F0%9F%8C%90%20%E5%BC%95%E5%AF%BC%E8%8A%82%E7%82%B91',
   'vless://94134baf-dab3-41dc-9c15-085fdf15b86e@72.61.170.142:443?hiddify=1&sni=72.61.170.142&type=xhttp&alpn=http%2F1.1&path=%2FmwNPtjMmRlEizimS5Qr3&host=72.61.170.142&encryption=none&fp=chrome&core=xray&extra=%7B%22headers%22%3A%7B%7D%7D&headerType=none&allowInsecure=true&insecure=true&security=tls#%F0%9F%8C%90%20%E5%BC%95%E5%AF%BC%E8%8A%82%E7%82%B92',
+  'vless://94134baf-dab3-41dc-9c15-085fdf15b86e@168.231.126.166:8443?hiddify=1&sni=168.231.126.166&type=xhttp&alpn=http%2F1.1&path=%2FlY4xhKGq8xfNOWdIEmY7Q&host=168.231.126.166&encryption=none&fp=chrome&core=xray&extra=%7B%22headers%22%3A%7B%7D%7D&headerType=none&allowInsecure=true&insecure=true&security=tls#%F0%9F%8C%90%20%E5%BC%95%E5%AF%BC%E8%8A%82%E7%82%B93',
+  'vless://94134baf-dab3-41dc-9c15-085fdf15b86e@72.61.170.142:8443?hiddify=1&sni=72.61.170.142&type=xhttp&alpn=http%2F1.1&path=%2FmwNPtjMmRlEizimS5Qr3&host=72.61.170.142&encryption=none&fp=chrome&core=xray&extra=%7B%22headers%22%3A%7B%7D%7D&headerType=none&allowInsecure=true&insecure=true&security=tls#%F0%9F%8C%90%20%E5%BC%95%E5%AF%BC%E8%8A%82%E7%82%B94',
 ];
 
 /// Profile name used for bootstrap so we can identify & replace it later.
@@ -41,6 +45,12 @@ class AutoSubImport extends _$AutoSubImport with InfraLogger {
   }
 
   Future<void> tryImport() async {
+    // Skip if _postSplashTasks is already handling subscription import
+    // to avoid duplicate network requests and upsertRemote calls.
+    if (postSplashSubImportStarted) {
+      loggy.info("auto-sub: skipping — _postSplashTasks already handling import");
+      return;
+    }
     await _doImport(force: false);
   }
 

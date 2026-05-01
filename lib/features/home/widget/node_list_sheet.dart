@@ -73,26 +73,16 @@ class NodeListPage extends HookConsumerWidget {
           final prefs = await SharedPreferences.getInstance();
           final auth = AuthService(prefs);
           if (!auth.isLoggedIn) { expiryChecked.value = true; return; }
+          // Use cached tier/status — home page refreshes these in the background.
+          // No need for extra API calls here.
           final ct = auth.cachedTier;
+          final cs = auth.cachedStatus;
           if (ct == 'vip' || ct == 'svip') {
             userTier.value = ct;
-          }
-          final userInfo = await auth.getUserInfo();
-          if (userInfo != null) {
-            final tier = userInfo['tier'] as String? ?? 'free';
-            userTier.value = tier;
-            if (tier == 'vip' || tier == 'svip') {
-              isExpired.value = false;
-              expiryChecked.value = true;
-              return;
-            }
-          }
-          final status = await auth.getTrialStatus();
-          if (status != null) {
-            if (status['status'] == 'expired') isExpired.value = true;
-            if (status['status'] == 'paid' && userTier.value == 'free') userTier.value = 'vip';
-            expiryChecked.value = true;
-            return;
+            isExpired.value = cs == 'expired';
+          } else {
+            userTier.value = 'free';
+            isExpired.value = false;
           }
         } catch (_) {}
         expiryChecked.value = true;
@@ -194,26 +184,15 @@ class NodeListTabPage extends HookConsumerWidget {
           final prefs = await SharedPreferences.getInstance();
           final auth = AuthService(prefs);
           if (!auth.isLoggedIn) { expiryChecked.value = true; return; }
+          // Use cached tier/status — home page refreshes these in the background.
           final ct = auth.cachedTier;
+          final cs = auth.cachedStatus;
           if (ct == 'vip' || ct == 'svip') {
             userTier.value = ct;
-          }
-          final userInfo = await auth.getUserInfo();
-          if (userInfo != null) {
-            final tier = userInfo['tier'] as String? ?? 'free';
-            userTier.value = tier;
-            if (tier == 'vip' || tier == 'svip') {
-              isExpired.value = false;
-              expiryChecked.value = true;
-              return;
-            }
-          }
-          final status = await auth.getTrialStatus();
-          if (status != null) {
-            if (status['status'] == 'expired') isExpired.value = true;
-            if (status['status'] == 'paid' && userTier.value == 'free') userTier.value = 'vip';
-            expiryChecked.value = true;
-            return;
+            isExpired.value = cs == 'expired';
+          } else {
+            userTier.value = 'free';
+            isExpired.value = false;
           }
         } catch (_) {}
         expiryChecked.value = true;
@@ -750,7 +729,10 @@ class _SwipeNodeTileState extends State<_SwipeNodeTile> with SingleTickerProvide
     final hasDelay = delay > 0 && delay < 65000;
     final isTimeout = delay >= 65000;
 
-    return GestureDetector(
+    return Semantics(
+      label: '${widget.title}${widget.isSelected ? ", selected" : ""}${widget.locked ? ", locked" : ""}',
+      hint: widget.locked ? null : 'Swipe left for actions',
+      child: GestureDetector(
       onHorizontalDragEnd: (details) {
         if (widget.locked) return;
         final v = details.primaryVelocity ?? 0;
@@ -778,15 +760,23 @@ class _SwipeNodeTileState extends State<_SwipeNodeTile> with SingleTickerProvide
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.end,
                   children: [
-                    _ActionButton(
-                      label: '测试',
-                      color: Colors.green,
-                      onTap: () { _close(); widget.onTest?.call(); },
+                    Semantics(
+                      button: true,
+                      label: AuthI18n.t['swipeTest'] ?? 'Test',
+                      child: _ActionButton(
+                        label: AuthI18n.t['swipeTest'] ?? '测试',
+                        color: Colors.green,
+                        onTap: () { _close(); widget.onTest?.call(); },
+                      ),
                     ),
-                    _ActionButton(
-                      label: '复制',
-                      color: Colors.grey.shade400,
-                      onTap: () { _close(); widget.onCopy?.call(); },
+                    Semantics(
+                      button: true,
+                      label: AuthI18n.t['swipeCopy'] ?? 'Copy',
+                      child: _ActionButton(
+                        label: AuthI18n.t['swipeCopy'] ?? '复制',
+                        color: Colors.grey.shade400,
+                        onTap: () { _close(); widget.onCopy?.call(); },
+                      ),
                     ),
                   ],
                 ),
@@ -893,6 +883,7 @@ class _SwipeNodeTileState extends State<_SwipeNodeTile> with SingleTickerProvide
           ],
         ),
       ),
+    ),  // close Semantics
     );
   }
 }

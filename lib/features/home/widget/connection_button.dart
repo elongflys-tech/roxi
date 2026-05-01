@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
@@ -40,6 +42,53 @@ class ConnectionButton extends HookConsumerWidget {
     // Debounce: prevent rapid double-taps
     final isBusy = useRef(false);
 
+    // Connection timeout: if stuck in connecting state for 45s, auto-disconnect
+    // and show a snackbar hint.
+    final connectingTimer = useRef<Timer?>(null);
+    final prevStatus = useRef<ConnectionStatus?>(null);
+
+    useEffect(() {
+      final status = connectionStatus.valueOrNull;
+      final prev = prevStatus.value;
+      prevStatus.value = status;
+
+      // Entering a non-terminal state (Connecting / Disconnecting)
+      final isTransitioning = status != null &&
+          status != const Connected() &&
+          status != const Disconnected();
+
+      if (isTransitioning && (prev == const Disconnected() || prev == null)) {
+        // Just started connecting — arm the timeout
+        connectingTimer.value?.cancel();
+        connectingTimer.value = Timer(const Duration(seconds: 45), () {
+          // Still not connected after 45s — force disconnect and notify user
+          final currentStatus = ref.read(connectionNotifierProvider).valueOrNull;
+          if (currentStatus != const Connected() && currentStatus != const Disconnected()) {
+            ref.read(connectionNotifierProvider.notifier).toggleConnection();
+            if (context.mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text(AuthI18n.t['connTimeout'] ?? '连接超时，请切换节点后重试'),
+                  duration: const Duration(seconds: 4),
+                ),
+              );
+            }
+          }
+        });
+      } else if (status == const Connected() || status == const Disconnected()) {
+        // Reached a terminal state — cancel the timer
+        connectingTimer.value?.cancel();
+        connectingTimer.value = null;
+      }
+
+      return null;
+    }, [connectionStatus]);
+
+    // Clean up timer on widget dispose
+    useEffect(() {
+      return () => connectingTimer.value?.cancel();
+    }, []);
+
     const buttonTheme = ConnectionButtonTheme.light;
     final s = AuthI18n.t;
 
@@ -70,15 +119,13 @@ class ConnectionButton extends HookConsumerWidget {
           await ref.read(connectionNotifierProvider.notifier).reconnect(activeProfile);
         }),
         AsyncData(value: Disconnected()) || AsyncError() => debounced(() async {
-          // Pre-check: block if trial expired (fire-and-forget style to avoid flicker)
+          // Pre-check: block if trial expired — use CACHED status (no network wait).
+          // The home page refreshes the cache in the background on mount.
           final prefs = await SharedPreferences.getInstance();
           final auth = AuthService(prefs);
-          if (auth.isLoggedIn) {
-            final status = await auth.getTrialStatus();
-            if (status != null && status['status'] == 'expired') {
-              if (context.mounted) showTrialExpiredDialog(context);
-              return;
-            }
+          if (auth.isLoggedIn && auth.cachedStatus == 'expired') {
+            if (context.mounted) showTrialExpiredDialog(context);
+            return;
           }
           // Check profile exists before proceeding
           if (ref.read(activeProfileProvider).valueOrNull == null) {
@@ -368,12 +415,15 @@ class _AnimatedRing extends StatefulWidget {
   State<_AnimatedRing> createState() => _AnimatedRingState();
 }
 
-class _AnimatedRingState extends State<_AnimatedRing> with SingleTickerProviderStateMixin {
+class _AnimatedRingState extends State<_AnimatedRing>
+    with SingleTickerProviderStateMixin, WidgetsBindingObserver {
   late AnimationController _ctrl;
+  bool _wasAnimatingBeforePause = false;
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _ctrl = AnimationController(vsync: this, duration: const Duration(milliseconds: 1500));
     _updateAnimation();
   }
@@ -386,13 +436,26 @@ class _AnimatedRingState extends State<_AnimatedRing> with SingleTickerProviderS
     }
   }
 
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.paused || state == AppLifecycleState.inactive) {
+      _wasAnimatingBeforePause = _ctrl.isAnimating;
+      if (_ctrl.isAnimating) _ctrl.stop();
+    } else if (state == AppLifecycleState.resumed) {
+      if (_wasAnimatingBeforePause) _updateAnimation();
+    }
+  }
+
   void _updateAnimation() {
     if (widget.isConnecting) {
+      _ctrl.duration = const Duration(milliseconds: 1500);
       _ctrl.repeat(reverse: true);
     } else if (widget.isConnected) {
-      // Gentle breathing
+      // Single gentle pulse on connect, then stop — saves CPU vs infinite repeat.
       _ctrl.duration = const Duration(milliseconds: 2500);
-      _ctrl.repeat(reverse: true);
+      _ctrl.forward().then((_) {
+        if (mounted) _ctrl.reverse();
+      });
     } else {
       _ctrl.stop();
       _ctrl.value = 0;
@@ -401,6 +464,7 @@ class _AnimatedRingState extends State<_AnimatedRing> with SingleTickerProviderS
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _ctrl.dispose();
     super.dispose();
   }

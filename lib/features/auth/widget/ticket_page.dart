@@ -236,8 +236,12 @@ class TicketDetailPage extends HookWidget {
                 duration: const Duration(milliseconds: 300), curve: Curves.easeOut);
             }
           });
+        } else {
+          // Non-200 response — leave ticket.value as null so the "not found" UI shows
         }
-      } catch (_) {}
+      } catch (e) {
+        debugPrint('TicketDetailPage.load error: $e');
+      }
       isLoading.value = false;
     }
 
@@ -266,14 +270,20 @@ class TicketDetailPage extends HookWidget {
               SnackBar(content: Text(s['ticketReplyFail'] ?? '发送失败')));
           }
         }
-      } catch (_) {}
+      } catch (e) {
+        debugPrint('TicketDetailPage.sendReply error: $e');
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(s['ticketReplyFail'] ?? '发送失败')));
+        }
+      }
       isSending.value = false;
     }
 
     Future<void> pickAndUpload() async {
       if (uploadedImages.value.length >= 5) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('最多 5 张图片')));
+          SnackBar(content: Text(s['maxImages'] ?? '最多 5 张图片')));
         return;
       }
       final picker = ImagePicker();
@@ -291,7 +301,8 @@ class TicketDetailPage extends HookWidget {
               SnackBar(content: Text(s['ticketUploadFail'] ?? '图片上传失败')));
           }
         }
-      } catch (_) {
+      } catch (e) {
+        debugPrint('TicketDetailPage.pickAndUpload error: $e');
         if (context.mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(content: Text(s['ticketUploadFail'] ?? '图片上传失败')));
@@ -531,7 +542,7 @@ class CreateTicketPage extends HookWidget {
     Future<void> pickAndUpload() async {
       if (uploadedImages.value.length >= 5) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('最多 5 张图片')));
+          SnackBar(content: Text(s['maxImages'] ?? '最多 5 张图片')));
         return;
       }
       final picker = ImagePicker();
@@ -549,7 +560,8 @@ class CreateTicketPage extends HookWidget {
               SnackBar(content: Text(s['ticketUploadFail'] ?? '图片上传失败')));
           }
         }
-      } catch (_) {
+      } catch (e) {
+        debugPrint('CreateTicketPage.pickAndUpload error: $e');
         if (context.mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(content: Text(s['ticketUploadFail'] ?? '图片上传失败')));
@@ -668,7 +680,7 @@ class CreateTicketPage extends HookWidget {
                   border: Border.all(color: Colors.grey.shade300, style: BorderStyle.solid)),
                 child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
                   Icon(Icons.add_photo_alternate_outlined, size: 24, color: Colors.grey.shade500),
-                  Text('图片', style: TextStyle(fontSize: 11, color: Colors.grey.shade500)),
+                  Text(s['imgLabel'] ?? '图片', style: TextStyle(fontSize: 11, color: Colors.grey.shade500)),
                 ]),
               ),
             ),

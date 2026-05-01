@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'package:http/http.dart' as http;
@@ -31,25 +32,55 @@ class AuthService {
     Duration timeout = const Duration(seconds: 8),
   }) => _postWithFallback(path, headers: headers, body: body, timeout: timeout);
 
-  /// Try GET request across all fallback domains. Returns first successful response.
+  /// Try GET request across all fallback domains using staggered start (Happy Eyeballs).
+  /// Starts the first domain immediately. If it doesn't succeed within 2s, fires the
+  /// second domain in parallel. Returns the first successful response.
   static Future<http.Response?> _getWithFallback(
     String path, {
     Map<String, String>? headers,
-    Duration timeout = const Duration(seconds: 8),
+    Duration timeout = const Duration(seconds: 5),
   }) async {
-    for (int i = 0; i < _fallbackUrls.length; i++) {
-      if (i > 0) await Future.delayed(Duration(milliseconds: 800 * i));
-      try {
-        final resp = await http.get(
-          Uri.parse('${_fallbackUrls[i]}$path'),
-          headers: headers,
-        ).timeout(timeout);
-        if (resp.statusCode == 200) return resp;
-      } catch (_) {
-        // Try next domain after backoff
-      }
+    final completer = Completer<http.Response?>();
+    int launched = 0;
+    int finished = 0;
+    bool done = false;
+
+    void tryDomain(int i) {
+      launched++;
+      http.get(
+        Uri.parse('${_fallbackUrls[i]}$path'),
+        headers: headers,
+      ).timeout(timeout).then((resp) {
+        if (!done && resp.statusCode == 200) {
+          done = true;
+          completer.complete(resp);
+        } else {
+          finished++;
+          if (!done && finished >= launched) completer.complete(null);
+        }
+      }).catchError((_) {
+        finished++;
+        if (!done && finished >= launched) completer.complete(null);
+      });
     }
-    return null;
+
+    // Staggered start: domain 0 immediately, domain 1 after 2s, domain 2 after 4s.
+    // If a domain succeeds before the next delay, we skip launching the rest.
+    for (int i = 0; i < _fallbackUrls.length; i++) {
+      if (done) break;
+      if (i > 0) {
+        await Future.delayed(const Duration(seconds: 2));
+        if (done) break;
+      }
+      tryDomain(i);
+    }
+
+    // Edge case: if all domains were skipped because done became true during delays,
+    // the completer is already completed. If launched > 0 but not yet done,
+    // the callbacks above will complete it.
+    if (launched == 0) return null;
+
+    return completer.future;
   }
 
   /// Try POST request across all fallback domains. Returns first successful response.
@@ -59,11 +90,11 @@ class AuthService {
     String path, {
     Map<String, String>? headers,
     String? body,
-    Duration timeout = const Duration(seconds: 8),
+    Duration timeout = const Duration(seconds: 5),
   }) async {
     http.Response? lastResp;
     for (int i = 0; i < _fallbackUrls.length; i++) {
-      if (i > 0) await Future.delayed(Duration(milliseconds: 800 * i));
+      if (i > 0) await Future.delayed(Duration(milliseconds: 500 * i));
       try {
         final resp = await http.post(
           Uri.parse('${_fallbackUrls[i]}$path'),
@@ -155,13 +186,14 @@ class AuthService {
   /// Falls back to random ID only if fingerprint unavailable.
   Future<String?> deviceRegister() async {
     try {
-      // Collect hardware fingerprint first — this is the stable device identity
+      // Collect hardware fingerprint — use cached value if available to avoid
+      // expensive shell commands (getprop, file reads) on every startup.
       String? hwFp;
       int envFlags = 0;
       try {
         final results = await Future.wait([
-          _getHwFingerprint(),
-          _getEnvFlags(),
+          _getHwFingerprintCached(),
+          _getEnvFlagsCached(),
         ]);
         hwFp = results[0] as String?;
         envFlags = results[1] as int;
@@ -220,6 +252,37 @@ class AuthService {
     } catch (e) {
       return '网络错误: $e';
     }
+  }
+
+  static const _hwFingerprintCacheKey = 'hw_fingerprint_cache';
+  static const _envFlagsCacheKey = 'env_flags_cache';
+
+  /// Cached hardware fingerprint — avoids expensive shell commands on every startup.
+  /// The fingerprint is hardware-based and doesn't change, so caching is safe.
+  Future<String?> _getHwFingerprintCached() async {
+    final cached = _prefs.getString(_hwFingerprintCacheKey);
+    if (cached != null && cached.isNotEmpty) return cached;
+    try {
+      final fp = await DeviceFingerprint.getHardwareFingerprint();
+      if (fp.isNotEmpty) {
+        await _prefs.setString(_hwFingerprintCacheKey, fp);
+        return fp;
+      }
+    } catch (_) {}
+    return null;
+  }
+
+  /// Cached environment flags — emulator/root/hook detection is expensive
+  /// (many file checks + process spawns). Cache for the session.
+  Future<int> _getEnvFlagsCached() async {
+    final cached = _prefs.getInt(_envFlagsCacheKey);
+    if (cached != null) return cached;
+    try {
+      final flags = await DeviceFingerprint.detectEnvironment();
+      await _prefs.setInt(_envFlagsCacheKey, flags);
+      return flags;
+    } catch (_) {}
+    return 0;
   }
 
   static Future<String?> _getHwFingerprint() async {
@@ -337,8 +400,8 @@ class AuthService {
       }
       // Attach hardware fingerprint so device-register can find this user after reinstall
       try {
-        final hwFp = await DeviceFingerprint.getHardwareFingerprint();
-        if (hwFp.isNotEmpty) body['hw_fingerprint'] = hwFp;
+        final hwFp = await _getHwFingerprintCached();
+        if (hwFp != null && hwFp.isNotEmpty) body['hw_fingerprint'] = hwFp;
         final devId = _prefs.getString(_deviceIdKey);
         if (devId != null && devId.isNotEmpty) body['device_id'] = devId;
       } catch (_) {}
@@ -371,8 +434,8 @@ class AuthService {
       final body = <String, dynamic>{'email': email, 'password': password};
       // Attach hardware fingerprint so device-register can find this user after reinstall
       try {
-        final hwFp = await DeviceFingerprint.getHardwareFingerprint();
-        if (hwFp.isNotEmpty) body['hw_fingerprint'] = hwFp;
+        final hwFp = await _getHwFingerprintCached();
+        if (hwFp != null && hwFp.isNotEmpty) body['hw_fingerprint'] = hwFp;
         final devId = _prefs.getString(_deviceIdKey);
         if (devId != null && devId.isNotEmpty) body['device_id'] = devId;
       } catch (_) {}
