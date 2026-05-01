@@ -174,7 +174,7 @@ abstract class ConfigOptions {
 
   static final enableFakeDns = PreferencesNotifier.create<bool, bool>("enable-fake-dns", false);
 
-  // static final enableDnsRouting = PreferencesNotifier.create<bool, bool>("enable-dns-routing", true);
+  static final enableDnsRouting = PreferencesNotifier.create<bool, bool>("enable-dns-routing", true);
 
   static final independentDnsCache = PreferencesNotifier.create<bool, bool>("independent-dns-cache", true);
 
@@ -327,7 +327,7 @@ abstract class ConfigOptions {
     "clash-api-port": clashApiPort,
     "bypass-lan": bypassLan,
     "allow-connection-from-lan": allowConnectionFromLan,
-    // "enable-dns-routing": enableDnsRouting,
+    "enable-dns-routing": enableDnsRouting,
 
     // mux
     // "mux.enable": enableMux,
@@ -438,7 +438,7 @@ abstract class ConfigOptions {
       bypassLan: ref.watch(bypassLan),
       allowConnectionFromLan: ref.watch(allowConnectionFromLan),
       enableFakeDns: ref.watch(enableFakeDns),
-      // enableDnsRouting: ref.watch(enableDnsRouting),
+      enableDnsRouting: ref.watch(enableDnsRouting),
       independentDnsCache: ref.watch(independentDnsCache),
       // mux: SingboxMuxOption(
       //   enable: ref.watch(enableMux),
