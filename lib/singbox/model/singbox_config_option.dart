@@ -45,7 +45,7 @@ class SingboxConfigOption with _$SingboxConfigOption {
     required bool bypassLan,
     required bool allowConnectionFromLan,
     required bool enableFakeDns,
-    // required bool enableDnsRouting,
+    required bool enableDnsRouting,
     required bool independentDnsCache,
     required List<SingboxRule> rules,
     // required SingboxMuxOption mux,
