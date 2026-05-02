@@ -139,6 +139,7 @@ class AuthService {
   static const _cachedTierKey = 'roxi_cached_tier';
   static const _cachedStatusKey = 'roxi_cached_status';
   static const _cachedExpireDateKey = 'roxi_cached_expire_date';
+  static const _cachedInviteInfoKey = 'roxi_cached_invite_info';
 
   final SharedPreferences _prefs;
 
@@ -698,6 +699,8 @@ class AuthService {
     return [];
   }
 
+  static const _cachedUserInfoKey = 'roxi_cached_user_info';
+
   Future<Map<String, dynamic>?> getUserInfo() async {
     try {
       var resp = await _getWithFallback('/api/user/me', headers: _headers);
@@ -709,8 +712,10 @@ class AuthService {
         }
       }
       if (resp != null && resp.statusCode == 200) {
-        final data = jsonDecode(_body(resp)) as Map<String, dynamic>;
-        // Cache key fields locally for offline access
+        final body = _body(resp);
+        final data = jsonDecode(body) as Map<String, dynamic>;
+        // Cache full response + key fields for offline access
+        _prefs.setString(_cachedUserInfoKey, body);
         final tier = data['tier'] as String?;
         if (tier != null) _prefs.setString(_cachedTierKey, tier);
         final ed = data['expire_date'];
@@ -718,7 +723,12 @@ class AuthService {
         return data;
       }
     } catch (_) {}
-    // Offline fallback: return cached data
+    // Offline fallback: return cached full response
+    final cached = _prefs.getString(_cachedUserInfoKey);
+    if (cached != null) {
+      try { return jsonDecode(cached) as Map<String, dynamic>; } catch (_) {}
+    }
+    // Legacy fallback: minimal cached fields
     final ct = _prefs.getString(_cachedTierKey);
     if (ct != null) {
       return {
@@ -746,9 +756,17 @@ class AuthService {
         }
       }
       if (resp != null && resp.statusCode == 200) {
-        return jsonDecode(_body(resp));
+        final data = jsonDecode(_body(resp)) as Map<String, dynamic>;
+        // Cache for offline access
+        _prefs.setString(_cachedInviteInfoKey, _body(resp));
+        return data;
       }
     } catch (_) {}
+    // Offline fallback: return cached invite info
+    final cached = _prefs.getString(_cachedInviteInfoKey);
+    if (cached != null) {
+      try { return jsonDecode(cached) as Map<String, dynamic>; } catch (_) {}
+    }
     return null;
   }
 
