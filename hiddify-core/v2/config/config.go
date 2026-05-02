@@ -395,6 +395,24 @@ func setInbound(options *option.Options, opt *HiddifyOptions) {
 }
 
 func setDns(options *option.Options, opt *HiddifyOptions) {
+	// Warn if a Chinese-region user still has a foreign direct DNS — this
+	// should have been migrated on the Dart side, but log it so we can spot
+	// stragglers during debugging.
+	if opt.Region == "cn" {
+		addr := strings.TrimPrefix(strings.TrimPrefix(
+			strings.TrimPrefix(opt.DirectDnsAddress, "udp://"),
+			"tcp://"), "https://")
+		addr = strings.Split(addr, "/")[0] // strip path from DoH URLs
+		switch addr {
+		case "223.5.5.5", "119.29.29.29", "114.114.114.114", "1.12.12.12", "local":
+			// Good — known Chinese DNS servers or system DNS.
+		default:
+			fmt.Printf("[DNS] WARN: Region=cn but DirectDnsAddress=%s (not a Chinese DNS). "+
+				"Chinese domains may resolve slowly or fail. Consider switching to 223.5.5.5.\n",
+				opt.DirectDnsAddress)
+		}
+	}
+
 	options.DNS = &option.DNSOptions{
 		StaticIPs: map[string][]string{},
 		DNSClientOptions: option.DNSClientOptions{

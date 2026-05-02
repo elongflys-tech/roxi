@@ -16,7 +16,7 @@ func DefaultHiddifyOptions() *HiddifyOptions {
 			DirectDnsDomainStrategy: DomainStrategy_as_is,
 			IndependentDnsCache:     false,
 			EnableFakeDns:           false,
-			EnableDnsRouting:        false,
+			EnableDnsRouting:        true,
 		},
 		InboundOptions: &InboundOptions{
 			EnableTun:      false,

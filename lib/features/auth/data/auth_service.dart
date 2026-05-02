@@ -700,7 +700,14 @@ class AuthService {
 
   Future<Map<String, dynamic>?> getUserInfo() async {
     try {
-      final resp = await _getWithFallback('/api/user/me', headers: _headers);
+      var resp = await _getWithFallback('/api/user/me', headers: _headers);
+      // Auto-retry on 401 (token expired) — re-register device and retry
+      if (resp != null && resp.statusCode == 401) {
+        final err = await deviceRegister();
+        if (err == null) {
+          resp = await _getWithFallback('/api/user/me', headers: _headers);
+        }
+      }
       if (resp != null && resp.statusCode == 200) {
         final data = jsonDecode(_body(resp)) as Map<String, dynamic>;
         // Cache key fields locally for offline access
@@ -724,10 +731,20 @@ class AuthService {
 
   Future<Map<String, dynamic>?> getInviteInfo() async {
     try {
-      final resp = await _getWithFallback(
+      var resp = await _getWithFallback(
         '/api/user/invite',
         headers: _headers,
       );
+      // Auto-retry on 401 (token expired) — re-register device and retry
+      if (resp != null && resp.statusCode == 401) {
+        final err = await deviceRegister();
+        if (err == null) {
+          resp = await _getWithFallback(
+            '/api/user/invite',
+            headers: _headers,
+          );
+        }
+      }
       if (resp != null && resp.statusCode == 200) {
         return jsonDecode(_body(resp));
       }

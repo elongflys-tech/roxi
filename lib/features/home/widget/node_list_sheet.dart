@@ -20,7 +20,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 /// Show node list as a full-screen page.
 Future<void> showNodeListSheet(BuildContext context) async {
-  Navigator.of(context).push(
+  Navigator.of(context, rootNavigator: true).push(
     MaterialPageRoute(builder: (_) => const NodeListPage()),
   );
 }

@@ -85,7 +85,7 @@ class _TrialExpiredDialog extends StatelessWidget {
             child: OutlinedButton.icon(
               onPressed: () async {
                 Navigator.of(context).pop();
-                Navigator.of(context).push(MaterialPageRoute(builder: (_) => const InviteRewardsPage()));
+                Navigator.of(context, rootNavigator: true).push(MaterialPageRoute(builder: (_) => const InviteRewardsPage()));
               },
               icon: const Icon(Icons.person_add_rounded, size: 18),
               label: Text(s['trialInviteBtn']!),
@@ -125,11 +125,11 @@ void _showInviteShareDialog(BuildContext context) async {
 
   final msg = '想访问 Google、YouTube、Twitter？试试 Roxi 吧！\n'
       '免费注册，一键连接，安全稳定。\n\n'
-      '📥 下载：https://dl.roxi.cc/roxi-latest.apk\n'
+      '📥 下载：https://dl.roxijet.cloud/roxi-latest.apk\n'
       '📢 群组：https://t.me/Roxifree\n\n'
-      '🔗 邀请链接：https://roxi.cc/$invCode\n'
+      '🔗 邀请链接：https://roxijet.cloud/$invCode\n'
       '注册时填我的邀请码：$invCode\n'
-      '好友购买会员，你我各得时长奖励！';
+      '填我的邀请码，领取免费节点！';
 
   showDialog(
     context: context,

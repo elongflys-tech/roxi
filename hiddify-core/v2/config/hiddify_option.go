@@ -112,7 +112,7 @@ func DefaultHiddifyOptions() *HiddifyOptions {
 			DirectDnsDomainStrategy: option.DomainStrategy(dns.DomainStrategyAsIS),
 			IndependentDNSCache:     false,
 			EnableFakeDNS:           false,
-			EnableDNSRouting:        false,
+			EnableDNSRouting:        true,
 		},
 		InboundOptions: InboundOptions{
 			EnableTun:      false,

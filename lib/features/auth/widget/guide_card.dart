@@ -28,7 +28,7 @@ class GuideCard extends StatelessWidget {
               title: s['guideInvite']!,
               subtitle: s['guideInviteDesc']!,
               trailingIcon: Icons.arrow_forward_ios_rounded,
-              onTap: () => Navigator.of(context).push(
+              onTap: () => Navigator.of(context, rootNavigator: true).push(
                 MaterialPageRoute(builder: (_) => const InviteRewardsPage()),
               ),
             ),

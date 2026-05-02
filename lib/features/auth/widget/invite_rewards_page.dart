@@ -77,13 +77,13 @@ class InviteRewardsPage extends HookWidget {
       body: loading.value
           ? const Center(child: CircularProgressIndicator())
           : SingleChildScrollView(
-              padding: const EdgeInsets.all(20),
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
               child: Column(
                 children: [
-                  // Gift icon
+                  // Gift icon (compact)
                   Container(
-                    width: 120,
-                    height: 120,
+                    width: 72,
+                    height: 72,
                     decoration: BoxDecoration(
                       shape: BoxShape.circle,
                       gradient: LinearGradient(
@@ -92,24 +92,24 @@ class InviteRewardsPage extends HookWidget {
                         end: Alignment.bottomRight,
                       ),
                     ),
-                    child: const Icon(Icons.card_giftcard_rounded, size: 60, color: Colors.pink),
+                    child: const Icon(Icons.card_giftcard_rounded, size: 36, color: Colors.pink),
                   ),
-                  const Gap(16),
+                  const Gap(10),
                   Text(
                     s['inviteRewardsHeadline'] ?? '推荐好友，领永久会员',
-                    style: theme.textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold),
+                    style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
                     textAlign: TextAlign.center,
                   ),
-                  const Gap(8),
+                  const Gap(6),
                   Text(
                     s['inviteRewardsSubtitle'] ?? '好友安装后填写您的邀请码即算推荐成功\n当其购买会员时，您可获得 30% 的充值金额作为余额奖励！',
-                    style: theme.textTheme.bodyMedium?.copyWith(color: Colors.grey.shade600, height: 1.5),
+                    style: theme.textTheme.bodySmall?.copyWith(color: Colors.grey.shade600, height: 1.5),
                     textAlign: TextAlign.center,
                   ),
-                  const Gap(24),
+                  const Gap(16),
                   // Invite code card
                   Container(
-                    padding: const EdgeInsets.all(20),
+                    padding: const EdgeInsets.all(16),
                     decoration: BoxDecoration(
                       color: Colors.grey.shade50,
                       borderRadius: BorderRadius.circular(16),
@@ -121,7 +121,7 @@ class InviteRewardsPage extends HookWidget {
                           s['inviteYourCode'] ?? '您的邀请码',
                           style: theme.textTheme.bodySmall?.copyWith(color: Colors.grey.shade600),
                         ),
-                        const Gap(8),
+                        const Gap(6),
                         Row(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
@@ -145,7 +145,7 @@ class InviteRewardsPage extends HookWidget {
                             ),
                           ],
                         ),
-                        const Gap(16),
+                        const Gap(12),
                         SizedBox(
                           width: double.infinity,
                           child: FilledButton.icon(
@@ -154,14 +154,14 @@ class InviteRewardsPage extends HookWidget {
                             label: Text(s['inviteShareBtn'] ?? '推荐给好友'),
                             style: FilledButton.styleFrom(
                               backgroundColor: Colors.pink,
-                              padding: const EdgeInsets.symmetric(vertical: 14),
+                              padding: const EdgeInsets.symmetric(vertical: 12),
                             ),
                           ),
                         ),
                       ],
                     ),
                   ),
-                  const Gap(32),
+                  const Gap(16),
                   // Stats
                   Row(
                     children: [
@@ -186,11 +186,11 @@ class InviteRewardsPage extends HookWidget {
                       ),
                     ],
                   ),
-                  const Gap(12),
+                  const Gap(10),
                   // Balance card
                   Container(
                     width: double.infinity,
-                    padding: const EdgeInsets.all(20),
+                    padding: const EdgeInsets.all(16),
                     decoration: BoxDecoration(
                       color: Colors.green.shade50,
                       borderRadius: BorderRadius.circular(16),
@@ -219,10 +219,10 @@ class InviteRewardsPage extends HookWidget {
                       ],
                     ),
                   ),
-                  const Gap(24),
+                  const Gap(14),
                   // Hint
                   Container(
-                    padding: const EdgeInsets.all(16),
+                    padding: const EdgeInsets.all(12),
                     decoration: BoxDecoration(
                       color: Colors.blue.shade50,
                       borderRadius: BorderRadius.circular(12),
@@ -305,11 +305,11 @@ void _shareInvite(BuildContext context, String inviteCode) {
       ? serverShareText.replaceAll('{code}', inviteCode)
       : '想访问 Google、YouTube、Twitter？试试 Roxi 吧！\n'
           '免费注册，一键连接，安全稳定。\n\n'
-          '📥 下载：https://dl.roxi.cc/roxi-latest.apk\n'
+          '📥 下载：https://dl.roxijet.cloud/roxi-latest.apk\n'
           '📢 群组：https://t.me/Roxifree\n\n'
-          '🔗 邀请链接：https://roxi.cc/$inviteCode\n'
+          '🔗 邀请链接：https://roxijet.cloud/$inviteCode\n'
           '注册时填我的邀请码：$inviteCode\n'
-          '好友充值，你获得 30% 佣金奖励！可提现！';
+          '填我的邀请码，领取免费节点！';
 
   Clipboard.setData(ClipboardData(text: msg));
   ScaffoldMessenger.of(context).showSnackBar(

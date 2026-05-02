@@ -163,7 +163,7 @@ class ProfilePage extends HookWidget {
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
             // Tappable invite header → InviteRewardsPage
             InkWell(
-              onTap: () => Navigator.of(context).push(
+              onTap: () => Navigator.of(context, rootNavigator: true).push(
                 MaterialPageRoute(builder: (_) => const InviteRewardsPage()),
               ),
               borderRadius: const BorderRadius.vertical(top: Radius.circular(12)),
@@ -210,7 +210,7 @@ class ProfilePage extends HookWidget {
               icon: Icons.support_agent_rounded,
               iconColor: Colors.blue,
               label: s['ticketBtn'] ?? '问题反馈',
-              onTap: () => Navigator.of(context).push(
+              onTap: () => Navigator.of(context, rootNavigator: true).push(
                 MaterialPageRoute(builder: (_) => const TicketListPage()),
               ),
             ),
