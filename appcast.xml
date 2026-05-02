@@ -3,20 +3,20 @@
     <channel>
         <title>Release</title>
         <item>
-            <title>Version 1.4.0</title>
-            <description>修复TUN重启权限错误；修复微信断网；修复印尼/土耳其/巴西分流规则；规则集改用CDN加速</description>
-            <pubDate>Wed, 29 Apr 2026 00:00:00 +0000</pubDate>
+            <title>Version 1.4.1</title>
+            <description>修复中国用户DNS分流导致微信等APP间歇断网；优化订阅模板DNS配置</description>
+            <pubDate>Sat, 02 May 2026 00:00:00 +0000</pubDate>
             <enclosure
                 url="https://dl.roxi.cc/roxi-latest.apk"
-                sparkle:version="1.4.0" sparkle:os="android" />
+                sparkle:version="1.4.1" sparkle:os="android" />
         </item>
         <item>
-            <title>Version 1.4.0</title>
-            <description>修复TUN重启权限错误；修复微信断网；修复印尼/土耳其/巴西分流规则；规则集改用CDN加速</description>
-            <pubDate>Wed, 29 Apr 2026 00:00:00 +0000</pubDate>
+            <title>Version 1.4.1</title>
+            <description>修复中国用户DNS分流导致微信等APP间歇断网；优化订阅模板DNS配置</description>
+            <pubDate>Sat, 02 May 2026 00:00:00 +0000</pubDate>
             <enclosure
                 url="https://dl.roxi.cc/roxi-latest.zip"
-                sparkle:version="1.4.0" sparkle:os="windows" />
+                sparkle:version="1.4.1" sparkle:os="windows" />
         </item>
     </channel>
 </rss>
