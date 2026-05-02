@@ -1,7 +1,7 @@
 display_name: Roxi
 publisher_display_name: Roxi
 identity_name: CC.Roxi.App
-msix_version: 1.4.0.0
+msix_version: 1.4.2.0
 logo_path: windows\runner\resources\app_icon.ico
 capabilities: internetClient, internetClientServer, privateNetworkClientServer
 languages: en-us, zh-cn, ru-ru, fa-ir
