@@ -11,7 +11,10 @@ class PreferencesMigration with InfraLogger {
   Future<void> migrate() async {
     final currentVersion = sharedPreferences.getInt(versionKey) ?? 0;
 
-    final migrationSteps = [PreferencesVersion1Migration(sharedPreferences)];
+    final migrationSteps = [
+      PreferencesVersion1Migration(sharedPreferences),
+      PreferencesVersion2DnsMigration(sharedPreferences),
+    ];
 
     if (currentVersion == migrationSteps.length) {
       loggy.debug("already using the latest version (v$currentVersion)");
@@ -106,4 +109,47 @@ class PreferencesVersion1Migration extends PreferencesMigrationStep with InfraLo
     "ipv6Only" => "ipv6_only",
     _ => "",
   };
+}
+
+/// V2: Migrate direct DNS address for Chinese users.
+///
+/// Old users who selected region=cn still have direct-dns-address stuck at
+/// the global default "udp://1.1.1.1" (or bare "1.1.1.1"). In China, 1.1.1.1
+/// is intermittently blocked by the GFW, causing DNS timeouts that surface as
+/// "no network" flickers in WeChat and other domestic apps.
+///
+/// This migration checks: if region is "cn" AND the stored direct DNS is one
+/// of the 1.1.1.1 variants (i.e. the user never manually changed it to
+/// something else), replace it with "223.5.5.5" (Alibaba public DNS, reliable
+/// inside China).
+class PreferencesVersion2DnsMigration extends PreferencesMigrationStep with InfraLogger {
+  PreferencesVersion2DnsMigration(super.sharedPreferences);
+
+  /// All default-ish 1.1.1.1 variants that a user would have if they never
+  /// touched the direct DNS setting.
+  static const _foreignDnsDefaults = {
+    "1.1.1.1",
+    "udp://1.1.1.1",
+    "tcp://1.1.1.1",
+    "https://1.1.1.1/dns-query",
+    "udp://1.1.1.2",
+  };
+
+  @override
+  Future<void> migrate() async {
+    final region = sharedPreferences.getString("region");
+    if (region != "cn") return;
+
+    final currentDns = sharedPreferences.getString("direct-dns-address");
+    if (currentDns == null || _foreignDnsDefaults.contains(currentDns)) {
+      loggy.debug(
+        "region=cn, migrating direct-dns-address from [$currentDns] to [223.5.5.5]",
+      );
+      await sharedPreferences.setString("direct-dns-address", "223.5.5.5");
+    } else {
+      loggy.debug(
+        "region=cn, direct-dns-address=[$currentDns] looks user-customized, skipping",
+      );
+    }
+  }
 }
