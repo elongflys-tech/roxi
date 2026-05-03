@@ -24,13 +24,27 @@ class TicketListPage extends HookWidget {
       error.value = null;
       try {
         final prefs = await SharedPreferences.getInstance();
-        final token = prefs.getString('roxi_token');
-        final resp = await AuthService.getWithFallback(
+        final auth = AuthService(prefs);
+        var token = prefs.getString('roxi_token');
+        var resp = await AuthService.getWithFallback(
           '/api/tickets?page=1&page_size=50',
           headers: {
             if (token != null) 'Authorization': 'Bearer $token',
           },
         );
+        // Auto-retry on 401 (token expired) — re-register device and retry
+        if (resp != null && resp.statusCode == 401) {
+          final err = await auth.deviceRegister();
+          if (err == null) {
+            token = prefs.getString('roxi_token');
+            resp = await AuthService.getWithFallback(
+              '/api/tickets?page=1&page_size=50',
+              headers: {
+                if (token != null) 'Authorization': 'Bearer $token',
+              },
+            );
+          }
+        }
         if (resp != null && resp.statusCode == 200) {
           final data = jsonDecode(utf8.decode(resp.bodyBytes));
           tickets.value = List<Map<String, dynamic>>.from(data['tickets'] ?? []);
@@ -38,7 +52,7 @@ class TicketListPage extends HookWidget {
           error.value = s['networkError'] ?? '加载失败';
         }
       } catch (e) {
-        error.value = e.toString();
+        error.value = s['networkError'] ?? '加载失败';
       }
       isLoading.value = false;
     }

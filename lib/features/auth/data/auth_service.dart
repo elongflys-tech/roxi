@@ -154,6 +154,9 @@ class AuthService {
   /// Cached tier from last successful API call. Works offline.
   String get cachedTier => _prefs.getString(_cachedTierKey) ?? 'free';
 
+  /// Cached expire date from last successful API call. Works offline.
+  String? get cachedExpireDate => _prefs.getString(_cachedExpireDateKey);
+
   /// Cached user status from last successful API call. Works offline.
   String get cachedStatus => _prefs.getString(_cachedStatusKey) ?? 'free';
 
@@ -180,6 +183,17 @@ class AuthService {
   Future<void> logout() async {
     await _prefs.remove(_tokenKey);
     await _prefs.remove(_emailKey);
+    // Clear all cached user data
+    await _prefs.remove(_cachedTierKey);
+    await _prefs.remove(_cachedStatusKey);
+    await _prefs.remove(_cachedExpireDateKey);
+    await _prefs.remove(_cachedUserInfoKey);
+    await _prefs.remove(_cachedInviteInfoKey);
+    // Clear in-memory caches
+    _userInfoCache = null;
+    _userInfoCacheTime = null;
+    _inviteInfoCache = null;
+    _inviteInfoCacheTime = null;
   }
 
   /// Auto device register — no email/password needed.

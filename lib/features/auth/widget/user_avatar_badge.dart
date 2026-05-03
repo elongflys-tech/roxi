@@ -13,6 +13,19 @@ import 'package:shared_preferences/shared_preferences.dart';
 ///   - expired: red ring + "过期" badge
 ///   - VIP: gold ring + "VIP" badge
 ///   - SVIP: purple-gold gradient ring + "SVIP" badge
+
+String _resolveTier(String tier, String? expireDateStr) {
+  final t = tier.toLowerCase();
+  if (t == 'vip' || t == 'svip') {
+    if (expireDateStr != null) {
+      final exp = DateTime.tryParse(expireDateStr);
+      if (exp != null && exp.isBefore(DateTime.now())) return 'expired';
+    }
+    return t;
+  }
+  return 'free';
+}
+
 class UserAvatarBadge extends HookWidget {
   final VoidCallback onTap;
   final double size;
@@ -21,7 +34,7 @@ class UserAvatarBadge extends HookWidget {
 
   @override
   Widget build(BuildContext context) {
-    // tier: "free" | "trial" | "expired" | "vip" | "svip"
+    // tier: "free" | "expired" | "vip" | "svip"
     final tier = useState<String>('free');
     final loading = useState(true);
 
@@ -35,32 +48,20 @@ class UserAvatarBadge extends HookWidget {
             loading.value = false;
             return;
           }
-          // Use getUserInfo which returns the authoritative 'tier' field directly
+          // Start with cached tier immediately (no network wait)
+          tier.value = _resolveTier(auth.cachedTier, auth.cachedExpireDate);
+          loading.value = false;
+
+          // Then try to refresh from network in background
           final user = await auth.getUserInfo();
           if (user != null) {
-            final userTier = (user['tier'] as String? ?? 'free').toLowerCase();
-            if (userTier == 'svip') {
-              final expStr = user['expire_date']?.toString();
-              if (expStr != null && DateTime.tryParse(expStr)?.isBefore(DateTime.now()) == true) {
-                tier.value = 'expired';
-              } else {
-                tier.value = 'svip';
-              }
-            } else if (userTier == 'vip') {
-              final expStr = user['expire_date']?.toString();
-              if (expStr != null && DateTime.tryParse(expStr)?.isBefore(DateTime.now()) == true) {
-                tier.value = 'expired';
-              } else {
-                tier.value = 'vip';
-              }
-            } else {
-              tier.value = 'free';
-            }
-          } else {
-            tier.value = 'free';
+            tier.value = _resolveTier(
+              (user['tier'] as String?) ?? 'free',
+              user['expire_date']?.toString(),
+            );
           }
         } catch (_) {
-          tier.value = 'free';
+          // Keep whatever tier we already set from cache
         }
         loading.value = false;
       }();

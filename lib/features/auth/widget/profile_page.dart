@@ -23,14 +23,16 @@ class ProfilePage extends HookWidget {
     final showAuthPanel = useState(false);
 
     Future<void> reload() async {
-      final prefs = await SharedPreferences.getInstance();
-      final auth = AuthService(prefs);
-      final futures = await Future.wait([auth.getUserInfo(), auth.getInviteInfo()]);
-      userInfo.value = futures[0];
-      inviteInfo.value = futures[1];
+      try {
+        final prefs = await SharedPreferences.getInstance();
+        final auth = AuthService(prefs);
+        final futures = await Future.wait([auth.getUserInfo(), auth.getInviteInfo()]);
+        userInfo.value = futures[0];
+        inviteInfo.value = futures[1];
+        final em = futures[0]?['email'];
+        if (em != null && em.toString().isNotEmpty) showAuthPanel.value = false;
+      } catch (_) {}
       isLoading.value = false;
-      final em = futures[0]?['email'];
-      if (em != null && em.toString().isNotEmpty) showAuthPanel.value = false;
     }
 
     useEffect(() { reload(); return null; }, []);
